@@ -1,0 +1,62 @@
+{
+  "main heading about parent information": {
+    "queryName": "getByRole",
+    "params": [
+      "heading",
+      "Who counts as a parent on the FAFSA® form?"
+    ]
+  },
+  "button to start the parent information process": {
+    "queryName": "getByRole",
+    "params": [
+      "button",
+      "Continue"
+    ]
+  },
+  "first parent first name input field": {
+    "queryName": "getByLabelText",
+    "params": [
+      "First Name (Parent 1)"
+    ]
+  },
+  "second parent first name input field": {
+    "queryName": "getByLabelText",
+    "params": [
+      "First Name (Parent 2)"
+    ]
+  },
+  "continue to next section button": {
+    "queryName": "getByRole",
+    "params": [
+      "button",
+      "Continue"
+    ]
+  },
+  "the yes radio button": {
+    "queryName": "getByRole",
+    "params": [
+      "radio",
+      "Yes"
+    ]
+  },
+  "the heading that describes the students parents": {
+    "queryName": "getByRole",
+    "params": [
+      "heading",
+      "Who counts as a parent on the FAFSA® form?"
+    ]
+  },
+  "the button about whether a parent can start the form ": {
+    "queryName": "getByRole",
+    "params": [
+      "button",
+      "Can a parent start a FAFSA form for the student?"
+    ]
+  },
+  "the section that contains 'Yes, a parent can start a FAFSA form for a dependent student.'": {
+    "queryName": "getByText",
+    "params": [
+      "Yes, a parent can start a FAFSA form for a dependent student."
+    ]
+  }
+}
