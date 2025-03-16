@@ -3,6 +3,7 @@ import { Ollama } from 'ollama';
 import Anthropic from '@anthropic-ai/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as cheerio from 'cheerio';
 
 export class A11yAILocator {
   private page: Page;
@@ -217,23 +218,30 @@ ${bodyContent}
    * @returns Sanitized body content
    */
   private extractBodyContent(html: string): string {
-    // AI! replace this with code that uses Cheerio.
     try {
-      // Extract body content using regex
-      const bodyMatch = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html);
-      if (bodyMatch && bodyMatch[1]) {
-        // Basic sanitization: remove script and style tags
-        let bodyContent = bodyMatch[1]
-          .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-          .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+      const $ = cheerio.load(html);
+      
+      // Remove scripts and styles
+      $('script, style').remove();
+      
+      // Remove data attributes and classes
+      $('*').each((_, el) => {
+        const element = $(el);
+        // Remove all data-* attributes except data-testid
+        Object.keys(el.attribs || {})
+          .filter(attr => attr.startsWith('data-') && attr !== 'data-testid')
+          .forEach(attr => element.removeAttr(attr));
         
-        // Trim whitespace
-        bodyContent = bodyContent.trim();
+        // Remove class attributes
+        element.removeAttr('class');
         
-        return bodyContent;
-      }
-      // If body tag not found, return the original HTML
-      return html;
+        // Remove other non-essential attributes
+        ['id', 'style'].forEach(attr => element.removeAttr(attr));
+      });
+      
+      // Get the body content or fall back to the entire document
+      const bodyContent = $('body').html() || $.html();
+      return bodyContent.trim();
     } catch (error) {
       console.warn(`Error extracting body content: ${error}`);
       return html;
