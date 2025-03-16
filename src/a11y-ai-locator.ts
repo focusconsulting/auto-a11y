@@ -127,6 +127,7 @@ export class A11yAILocator {
     const html = await this.page.content();
     
     // Extract and sanitize only the body content
+    // AI! The body content should be cached
     const bodyContent = this.extractBodyContent(html);
     
     // Prepare the prompt for AI
