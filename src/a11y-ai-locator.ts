@@ -176,7 +176,6 @@ ${bodyContent}
         messages: [{ role: 'user', content: prompt }]
       });
       queryInfo = response.content[0].text.trim();
-      console.log(queryInfo);
     } else if (this.ollama) {
       const response = await this.ollama.chat({
         model: this.model,
@@ -218,6 +217,7 @@ ${bodyContent}
    * @returns Sanitized body content
    */
   private extractBodyContent(html: string): string {
+    // AI! replace this with code that uses Cheerio.
     try {
       // Extract body content using regex
       const bodyMatch = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html);
