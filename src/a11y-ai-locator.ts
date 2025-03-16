@@ -130,7 +130,6 @@ export class A11yAILocator {
     const bodyContent = this.extractBodyContent(html);
     
     // Prepare the prompt for AI
-    // AI! adjust the prompt for stricter priority order
     const prompt = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
 determine the most appropriate Testing Library query to locate that element.
@@ -145,21 +144,37 @@ getByLabelText: Email address
 getByPlaceholderText: Enter your name
 getByTestId: login-form
 
-Choose from these query types (in order of preference):
-1. getByRole - when element has a specific ARIA role and accessible name
-2. getByLabelText - for form elements with associated labels
-3. getByPlaceholderText - for input elements with placeholder text
-4. getByAltText - for images with alt text
-5. getByText - CRITICAL INSTRUCTION:                    
-  - You MUST provide the EXACT and COMPLETE text content 
-of the element                                          
-  - NEVER return partial text                          
-  - Example: if element is <div>Yes, you can</div>,    
-return "getByText: Yes, you can" (NOT just "Yes")       
-  - Example: if element is <button>Submit form</button>, 
-return "getByText: Submit form" (NOT just "Submit")     
-  - ALWAYS include ALL text within the element 
-6. getByTestId - when element has a data-testid attribute
+STRICT PRIORITY ORDER - You MUST follow this order when selecting a query type:
+
+1. getByRole - HIGHEST PRIORITY
+   - Use whenever possible if the element has a semantic role and accessible name
+   - Examples: getByRole: button, Submit | getByRole: heading, Welcome | getByRole: checkbox, Accept terms
+   - Check for roles like: button, link, heading, checkbox, radio, textbox, combobox, listbox, etc.
+
+2. getByLabelText - HIGH PRIORITY
+   - For form elements with associated labels
+   - Example: getByLabelText: Email address
+
+3. getByPlaceholderText
+   - For input elements with placeholder text
+   - Example: getByPlaceholderText: Enter your name
+
+4. getByAltText
+   - For images with alt text
+   - Example: getByAltText: Company logo
+
+5. getByText - LOWER PRIORITY
+   - Only use when options 1-4 are not applicable
+   - CRITICAL INSTRUCTION:                    
+     - You MUST provide the EXACT and COMPLETE text content of the element                                          
+     - NEVER return partial text                          
+     - Example: if element is <div>Yes, you can</div>, return "getByText: Yes, you can" (NOT just "Yes")       
+     - Example: if element is <button>Submit form</button>, return "getByText: Submit form" (NOT just "Submit")     
+     - ALWAYS include ALL text within the element 
+
+6. getByTestId - LOWEST PRIORITY
+   - Only use as a last resort when no other query would work
+   - Example: getByTestId: login-form
 
 Description: ${description}
 
