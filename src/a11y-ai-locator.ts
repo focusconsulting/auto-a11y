@@ -130,6 +130,7 @@ export class A11yAILocator {
     const bodyContent = this.extractBodyContent(html);
     
     // Prepare the prompt for AI
+    // AI! adjust the prompt for stricter priority order
     const prompt = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
 determine the most appropriate Testing Library query to locate that element.
@@ -146,7 +147,10 @@ getByTestId: login-form
 
 Choose from these query types (in order of preference):
 1. getByRole - when element has a specific ARIA role and accessible name
-2. getByText - CRITICAL INSTRUCTION:                    
+2. getByLabelText - for form elements with associated labels
+3. getByPlaceholderText - for input elements with placeholder text
+4. getByAltText - for images with alt text
+5. getByText - CRITICAL INSTRUCTION:                    
   - You MUST provide the EXACT and COMPLETE text content 
 of the element                                          
   - NEVER return partial text                          
@@ -155,10 +159,7 @@ return "getByText: Yes, you can" (NOT just "Yes")
   - Example: if element is <button>Submit form</button>, 
 return "getByText: Submit form" (NOT just "Submit")     
   - ALWAYS include ALL text within the element 
-3. getByLabelText - for form elements with associated labels
-4. getByPlaceholderText - for input elements with placeholder text
-5. getByTestId - when element has a data-testid attribute
-6. getByAltText - for images with alt text
+6. getByTestId - when element has a data-testid attribute
 
 Description: ${description}
 
@@ -206,12 +207,7 @@ ${bodyContent}
     return this.executeTestingLibraryQuery(queryName, queryParams);
   }
 
-  /**
-   * Executes the appropriate Testing Library query based on the AI suggestion
-   * @param queryName The name of the Testing Library query
-   * @param params The parameters for the query
-   * @returns Playwright Locator
-   */
+  
   /**
    * Extracts and sanitizes the body content from HTML
    * @param html The full HTML content
@@ -248,6 +244,12 @@ ${bodyContent}
     }
   }
 
+  /**
+   * Executes the appropriate Testing Library query based on the AI suggestion
+   * @param queryName The name of the Testing Library query
+   * @param params The parameters for the query
+   * @returns Playwright Locator
+   */
   private executeTestingLibraryQuery(queryName: string, params: string[]): Locator {
     switch(queryName.toLowerCase()) {
       case 'getbyrole':
