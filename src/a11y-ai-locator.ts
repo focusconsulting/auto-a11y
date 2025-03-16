@@ -12,6 +12,8 @@ export class A11yAILocator {
   private model: string;
   private aiProvider: 'ollama' | 'anthropic';
   private snapshotFilePath: string | null = null;
+  private cachedBodyContent: string | null = null;
+  private lastHtml: string | null = null;
 
   constructor(page: Page, testInfo: TestInfo, options: { 
     model?: string, 
@@ -127,8 +129,17 @@ export class A11yAILocator {
     const html = await this.page.content();
     
     // Extract and sanitize only the body content
-    // AI! The body content should be cached
-    const bodyContent = this.extractBodyContent(html);
+    let bodyContent: string;
+    
+    // Use cached body content if HTML hasn't changed
+    if (this.lastHtml === html && this.cachedBodyContent) {
+      bodyContent = this.cachedBodyContent;
+    } else {
+      bodyContent = this.extractBodyContent(html);
+      // Cache the results
+      this.lastHtml = html;
+      this.cachedBodyContent = bodyContent;
+    }
     
     // Prepare the prompt for AI
     const prompt = `
