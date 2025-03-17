@@ -14,14 +14,17 @@ export class A11yAILocator {
   private snapshotFilePath: string | null = null;
   private cachedBodyContent: string | null = null;
   private lastHtml: string | null = null;
+  private timeout: number;
 
   constructor(page: Page, testInfo: TestInfo, options: { 
     model?: string, 
     baseUrl?: string, 
     snapshotFilePath?: string,
-    apiKey?: string 
+    apiKey?: string,
+    timeout?: number
   } = {}) {
     this.page = page;
+    this.timeout = options.timeout || 30000; // Default 30 seconds
     
     // Determine which AI provider to use based on the model
     if (options.model === 'claude-3-7' || options.model?.startsWith('claude-')) {
@@ -135,7 +138,7 @@ export class A11yAILocator {
     if (this.lastHtml === html && this.cachedBodyContent) {
       bodyContent = this.cachedBodyContent;
     } else {
-      bodyContent = this.extractBodyContent(html);
+      bodyContent = this.extractBodyContent(html, description);
       // Cache the results
       this.lastHtml = html;
       this.cachedBodyContent = bodyContent;
@@ -194,53 +197,85 @@ HTML:
 ${bodyContent}
 `;
 
-    let queryInfo: string;
-
-    // Get the query suggestion from the appropriate AI provider
-    if (this.aiProvider === 'anthropic' && this.anthropic) {
-      const response = await this.anthropic.messages.create({
-        model: this.model,
-        max_tokens: 1024,
-        system: "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
-        messages: [{ role: 'user', content: prompt }]
+    try {
+      // Set up a timeout for the AI request
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('AI request timed out')), this.timeout);
       });
-      queryInfo = response.content[0].text.trim();
-    } else if (this.ollama) {
-      const response = await this.ollama.chat({
-        model: this.model,
-        messages: [{ role: 'user', content: prompt }]
-      });
-      queryInfo = response.message.content.trim();
-    } else {
-      throw new Error('No AI provider configured');
+      
+      // Make the AI request with timeout
+      let queryInfo: string;
+      if (this.aiProvider === 'anthropic' && this.anthropic) {
+        const responsePromise = this.anthropic.messages.create({
+          model: this.model,
+          max_tokens: 1024,
+          system: "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
+          messages: [{ role: 'user', content: prompt }]
+        });
+        
+        const response = await Promise.race([responsePromise, timeoutPromise]);
+        queryInfo = response.content[0].text.trim();
+      } else if (this.ollama) {
+        const responsePromise = this.ollama.chat({
+          model: this.model,
+          messages: [{ role: 'user', content: prompt }]
+        });
+        
+        const response = await Promise.race([responsePromise, timeoutPromise]);
+        queryInfo = response.message.content.trim();
+      } else {
+        throw new Error('No AI provider configured');
+      }
+      
+      const [queryName, ...params] = queryInfo.split(':').map(part => part.trim());
+      
+      // Handle parameters more carefully to avoid splitting text that contains commas
+      let queryParams: string[] = [];
+      
+      // For getByText, we want to preserve the entire text including any commas
+      if (queryName.toLowerCase() === 'getbytext') {
+        queryParams = [params.join(':').trim()];
+      } else {
+        // For other query types, we can split by comma as they typically have separate parameters
+        queryParams = params.join(':').split(',').map(p => p.trim());
+      }
+      
+      // Save the snapshot for future use
+      this.saveSnapshot(description, { queryName, params: queryParams });
+      
+      // Execute the appropriate Testing Library query
+      return this.executeTestingLibraryQuery(queryName, queryParams);
+      
+    } catch (error) {
+      console.warn(`AI request failed or timed out: ${error}. Trying with simplified HTML...`);
+      
+      // Fall back to simplified HTML approach
+      try {
+        const { queryName, params } = await this.locateWithSimplifiedHTML(description, html);
+        
+        // Save the snapshot for future use
+        this.saveSnapshot(description, { queryName, params });
+        
+        // Execute the appropriate Testing Library query
+        return this.executeTestingLibraryQuery(queryName, params);
+      } catch (fallbackError) {
+        console.error(`Simplified HTML approach also failed: ${fallbackError}`);
+        
+        // Last resort: try a simple text search
+        console.warn(`Falling back to simple text search for: "${description}"`);
+        return this.page.getByText(description, { exact: false });
+      }
     }
-    const [queryName, ...params] = queryInfo.split(':').map(part => part.trim());
-    
-    // Handle parameters more carefully to avoid splitting text that contains commas
-    let queryParams: string[] = [];
-    
-    // For getByText, we want to preserve the entire text including any commas
-    if (queryName.toLowerCase() === 'getbytext') {
-      queryParams = [params.join(':').trim()];
-    } else {
-      // For other query types, we can split by comma as they typically have separate parameters
-      queryParams = params.join(':').split(',').map(p => p.trim());
-    }
-    
-    // Save the snapshot for future use
-    this.saveSnapshot(description, { queryName, params: queryParams });
-    
-    // Execute the appropriate Testing Library query
-    return this.executeTestingLibraryQuery(queryName, queryParams);
   }
 
   
   /**
    * Extracts and sanitizes the body content from HTML
    * @param html The full HTML content
+   * @param description The element description to help focus the extraction
    * @returns Sanitized body content
    */
-  private extractBodyContent(html: string): string {
+  private extractBodyContent(html: string, description: string): string {
     try {
       const $ = cheerio.load(html);
       
@@ -262,13 +297,142 @@ ${bodyContent}
         ['id', 'style'].forEach(attr => element.removeAttr(attr));
       });
       
-      // Get the body content or fall back to the entire document
-      const bodyContent = $('body').html() || $.html();
+      // Try to find elements that might match the description
+      const searchTerms = description.toLowerCase().split(/\s+/);
+      let relevantElements: cheerio.Cheerio = $();
+      
+      // Look for elements containing text similar to the description
+      $('body *').each((_, el) => {
+        const text = $(el).text().toLowerCase();
+        if (searchTerms.some(term => text.includes(term))) {
+          relevantElements = relevantElements.add(el);
+        }
+      });
+      
+      // If we found relevant elements, include them and their context
+      if (relevantElements.length > 0) {
+        let contextHTML = '';
+        relevantElements.each((_, el) => {
+          // Get the element and its parent context (up to 2 levels)
+          const element = $(el);
+          const parent = element.parent();
+          const grandparent = parent.parent();
+          
+          // Add the grandparent's HTML if it's not too large
+          if (grandparent.html()?.length < 5000) {
+            contextHTML += grandparent.clone().wrap('<div>').parent().html() + '\n';
+          } else if (parent.html()?.length < 5000) {
+            contextHTML += parent.clone().wrap('<div>').parent().html() + '\n';
+          } else {
+            contextHTML += element.clone().wrap('<div>').parent().html() + '\n';
+          }
+        });
+        
+        // If we have context HTML, return it (with deduplication)
+        if (contextHTML) {
+          // Simple deduplication by converting to a Set and back
+          const lines = [...new Set(contextHTML.split('\n'))];
+          return lines.join('\n').trim();
+        }
+      }
+      
+      // If no relevant elements found or context extraction failed,
+      // get the body content and truncate if necessary
+      let bodyContent = $('body').html() || $.html();
+      
+      // Truncate if too large (keep first and last parts which often contain important UI elements)
+      const maxLength = 15000; // Adjust based on your model's context window
+      if (bodyContent.length > maxLength) {
+        const firstPart = bodyContent.substring(0, maxLength / 2);
+        const lastPart = bodyContent.substring(bodyContent.length - maxLength / 2);
+        bodyContent = firstPart + '\n...[content truncated]...\n' + lastPart;
+      }
+      
       return bodyContent.trim();
     } catch (error) {
       console.warn(`Error extracting body content: ${error}`);
-      return html;
+      return html.length > 20000 ? html.substring(0, 10000) + '...' + html.substring(html.length - 10000) : html;
     }
+  }
+
+  /**
+   * Attempts to locate an element using simplified HTML when the main approach times out
+   * @param description The element description
+   * @param html The full HTML content
+   * @returns Object containing query name and parameters
+   */
+  private async locateWithSimplifiedHTML(description: string, html: string): Promise<{ queryName: string, params: string[] }> {
+    // Create a much more simplified version of the HTML
+    const $ = cheerio.load(html);
+    
+    // Keep only essential elements and their text content
+    $('*').each((_, el) => {
+      const element = $(el);
+      // Keep only elements that might be interactive or contain text
+      const tagName = el.tagName.toLowerCase();
+      const isImportant = ['a', 'button', 'input', 'select', 'textarea', 'label', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p'].includes(tagName);
+      
+      if (!isImportant && !element.has('a, button, input, select, textarea, label').length) {
+        // Remove attributes except role, aria-* and data-testid
+        const attribs = {...el.attribs};
+        Object.keys(attribs).forEach(attr => {
+          if (attr !== 'role' && !attr.startsWith('aria-') && attr !== 'data-testid') {
+            element.removeAttr(attr);
+          }
+        });
+      }
+    });
+    
+    // Get simplified HTML
+    const simplifiedHTML = $('body').html() || $.html();
+    
+    // Create a simplified prompt
+    const prompt = `
+Find the most appropriate Testing Library query for this element: "${description}"
+
+Return ONLY the query name and parameters in this format:
+queryName: parameter
+
+Priority order: getByRole (highest), getByLabelText, getByPlaceholderText, getByAltText, getByText, getByTestId (lowest)
+
+HTML:
+${simplifiedHTML}
+`;
+
+    // Get the query suggestion from the appropriate AI provider
+    let queryInfo: string;
+    if (this.aiProvider === 'anthropic' && this.anthropic) {
+      const response = await this.anthropic.messages.create({
+        model: this.model,
+        max_tokens: 1024,
+        system: "Return only the query name and parameters. Be concise.",
+        messages: [{ role: 'user', content: prompt }]
+      });
+      queryInfo = response.content[0].text.trim();
+    } else if (this.ollama) {
+      const response = await this.ollama.chat({
+        model: this.model,
+        messages: [{ role: 'user', content: prompt }]
+      });
+      queryInfo = response.message.content.trim();
+    } else {
+      throw new Error('No AI provider configured');
+    }
+    
+    const [queryName, ...params] = queryInfo.split(':').map(part => part.trim());
+    
+    // Handle parameters more carefully to avoid splitting text that contains commas
+    let queryParams: string[] = [];
+    
+    // For getByText, we want to preserve the entire text including any commas
+    if (queryName.toLowerCase() === 'getbytext') {
+      queryParams = [params.join(':').trim()];
+    } else {
+      // For other query types, we can split by comma as they typically have separate parameters
+      queryParams = params.join(':').split(',').map(p => p.trim());
+    }
+    
+    return { queryName, params: queryParams };
   }
 
   /**
@@ -316,7 +480,8 @@ export function createA11yAILocator(
     model?: string, 
     baseUrl?: string, 
     snapshotFilePath?: string,
-    apiKey?: string 
+    apiKey?: string,
+    timeout?: number
   }
 ): A11yAILocator {
   return new A11yAILocator(page, testInfo, options);
