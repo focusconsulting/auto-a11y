@@ -408,9 +408,17 @@ ${simplifiedHTML}
         system: "Return only the query name and parameters. Be concise.",
         messages: [{ role: 'user', content: prompt }]
       });
-      // AI! update the logic here to guarantee that content[0] is always text
-      if(response.content[0].type === "text") {
+      // Handle different content types in the response
+      if (response.content[0].type === "text") {
         queryInfo = response.content[0].text.trim();
+      } else {
+        // If first content item isn't text, search for the first text item
+        const textContent = response.content.find(item => item.type === "text");
+        if (textContent && 'text' in textContent) {
+          queryInfo = textContent.text.trim();
+        } else {
+          throw new Error('No text content found in Anthropic response');
+        }
       }
     } else if (this.ollama) {
       const response = await this.ollama.chat({
