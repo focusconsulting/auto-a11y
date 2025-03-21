@@ -144,7 +144,6 @@ export class A11yAILocator {
       this.cachedBodyContent = bodyContent;
     }
     
-    // Prepare the prompt for AI
     const prompt = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
 determine the most appropriate Testing Library query to locate that element.
@@ -377,8 +376,7 @@ ${bodyContent}
     $('*').each((_, el) => {
       const element = $(el);
       // Keep only elements that might be interactive or contain text
-      // AI! fix the error: Property 'tagName' does not exist on type 'Cheerio'.
-      const tagName = element.tagName.toLowerCase();
+      const tagName = el.tagName?.toLowerCase() || '';
       const isImportant = ['a', 'button', 'input', 'select', 'textarea', 'label', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p'].includes(tagName);
       
       if (!isImportant && !element.has('a, button, input, select, textarea, label').length) {
