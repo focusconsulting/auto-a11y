@@ -182,11 +182,11 @@ getByTestId: login-form
 
 STRICT PRIORITY ORDER - You MUST follow this order when selecting a query type:
 
-// AI! make the getByRole stricter so that it can only return valid ARIA roles.  It currently's returns getByRole("paragraph")
 1. getByRole - HIGHEST PRIORITY
    - Use whenever possible if the element has a semantic role and accessible name
    - Examples: getByRole: button, Submit | getByRole: heading, Welcome | getByRole: checkbox, Accept terms
-   - Check for roles like: button, link, heading, checkbox, radio, textbox, combobox, listbox, etc.
+   - ONLY use with valid ARIA roles such as: alert, alertdialog, application, article, banner, button, cell, checkbox, columnheader, combobox, complementary, contentinfo, definition, dialog, directory, document, feed, figure, form, grid, gridcell, group, heading, img, link, list, listbox, listitem, log, main, marquee, math, menu, menubar, menuitem, meter, navigation, none, note, option, presentation, progressbar, radio, radiogroup, region, row, rowgroup, rowheader, scrollbar, search, searchbox, separator, slider, spinbutton, status, switch, tab, table, tablist, tabpanel, term, textbox, timer, toolbar, tooltip, tree, treegrid, treeitem
+   - NEVER use with non-ARIA roles like "paragraph", "span", "div", etc.
 
 2. getByLabelText - HIGH PRIORITY
    - For form elements with associated labels
