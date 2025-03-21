@@ -166,22 +166,21 @@ export class A11yAILocator {
       this.cachedBodyContent = bodyContent;
     }
 
-    // AI! this prompt will occasionally return additional data.  Modify it so that it returns JSON like {"query": "getByRole", "params": ["button", "Submit"]}
     const prompt = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
 determine the most appropriate Testing Library query to locate that element.
 
-Return ONLY the query name and parameters in this format:
-queryName: parameter
+Return ONLY a JSON object with the following format:
+{"query": "queryName", "params": ["param1", "param2"]}
 
 For example:
-getByRole: button, Submit
-getByText: Sign up now
-getByLabelText: Email address
-getByPlaceholderText: Enter your name
-getByTestId: login-form
+{"query": "getByRole", "params": ["button", "Submit"]}
+{"query": "getByText", "params": ["Sign up now"]}
+{"query": "getByLabelText", "params": ["Email address"]}
+{"query": "getByPlaceholderText", "params": ["Enter your name"]}
+{"query": "getByTestId", "params": ["login-form"]}
 
-IMPORTANT: you must return only the queryName and parameters and nothing else.
+IMPORTANT: you must return only the JSON object and nothing else.
 
 STRICT PRIORITY ORDER - You MUST follow this order when selecting a query type:
 
@@ -263,22 +262,34 @@ ${bodyContent}
         throw new Error("No AI provider configured");
       }
 
-      const [queryName, ...params] = queryInfo
-        .split(":")
-        .map((part) => part.trim());
-
-      // Handle parameters more carefully to avoid splitting text that contains commas
-      let queryParams: string[] = [];
-
-      // For getByText, we want to preserve the entire text including any commas
-      if (queryName.toLowerCase() === "getbytext") {
-        queryParams = [params.join(":").trim()];
-      } else {
-        // For other query types, we can split by comma as they typically have separate parameters
-        queryParams = params
-          .join(":")
-          .split(",")
-          .map((p) => p.trim());
+      // Parse the JSON response
+      let queryName: string;
+      let queryParams: string[];
+      
+      try {
+        const jsonResponse = JSON.parse(queryInfo);
+        queryName = jsonResponse.query;
+        queryParams = jsonResponse.params || [];
+      } catch (error) {
+        console.warn(`Failed to parse JSON response: ${error}. Falling back to text parsing.`);
+        
+        // Fallback to the old text parsing method
+        const [name, ...params] = queryInfo
+          .split(":")
+          .map((part) => part.trim());
+          
+        queryName = name;
+        
+        // Handle parameters more carefully to avoid splitting text that contains commas
+        if (queryName.toLowerCase() === "getbytext") {
+          queryParams = [params.join(":").trim()];
+        } else {
+          // For other query types, we can split by comma as they typically have separate parameters
+          queryParams = params
+            .join(":")
+            .split(",")
+            .map((p) => p.trim());
+        }
       }
 
       // Save the snapshot for future use
@@ -471,8 +482,11 @@ ${bodyContent}
     const prompt = `
 Find the most appropriate Testing Library query for this element: "${description}"
 
-Return ONLY the query name and parameters in this format:
-queryName: parameter
+Return ONLY a JSON object with the following format:
+{"query": "queryName", "params": ["param1", "param2"]}
+
+For example:
+{"query": "getByRole", "params": ["button", "Submit"]}
 
 Priority order: getByRole (highest), getByLabelText, getByPlaceholderText, getByAltText, getByText, getByTestId (lowest)
 
@@ -513,22 +527,35 @@ ${simplifiedHTML}
       throw new Error("No AI provider configured");
     }
 
-    const [queryName, ...params] = queryInfo
-      .split(":")
-      .map((part) => part.trim());
+    // Parse the JSON response
+    try {
+      const jsonResponse = JSON.parse(queryInfo);
+      const queryName = jsonResponse.query;
+      const queryParams = jsonResponse.params || [];
+      return { queryName, params: queryParams };
+    } catch (error) {
+      console.warn(`Failed to parse JSON response: ${error}. Falling back to text parsing.`);
+      
+      // Fallback to the old text parsing method
+      const [queryName, ...params] = queryInfo
+        .split(":")
+        .map((part) => part.trim());
 
-    // Handle parameters more carefully to avoid splitting text that contains commas
-    let queryParams: string[] = [];
+      // Handle parameters more carefully to avoid splitting text that contains commas
+      let queryParams: string[] = [];
 
-    // For getByText, we want to preserve the entire text including any commas
-    if (queryName.toLowerCase() === "getbytext") {
-      queryParams = [params.join(":").trim()];
-    } else {
-      // For other query types, we can split by comma as they typically have separate parameters
-      queryParams = params
-        .join(":")
-        .split(",")
-        .map((p) => p.trim());
+      // For getByText, we want to preserve the entire text including any commas
+      if (queryName.toLowerCase() === "getbytext") {
+        queryParams = [params.join(":").trim()];
+      } else {
+        // For other query types, we can split by comma as they typically have separate parameters
+        queryParams = params
+          .join(":")
+          .split(",")
+          .map((p) => p.trim());
+      }
+      
+      return { queryName, params: queryParams };
     }
 
     return { queryName, params: queryParams };
