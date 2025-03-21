@@ -55,6 +55,7 @@ export class A11yAILocator {
       // Try to get test info from page context
       if (testInfo.title) {
         // Get the test file path and create a snapshot directory next to it
+        // AI! fix the created director example.spec.ts should be the directory __example-locator-snapshots__, but instead its __example.spec-locator-snapshots__
         const testFilePath = testInfo.file;
         const testDir = path.dirname(testFilePath);
         const testFileName = path.basename(testFilePath, path.extname(testFilePath));
