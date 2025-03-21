@@ -408,7 +408,10 @@ ${simplifiedHTML}
         system: "Return only the query name and parameters. Be concise.",
         messages: [{ role: 'user', content: prompt }]
       });
-      queryInfo = response.content[0].text.trim();
+      // AI! update the logic here to guarantee that content[0] is always text
+      if(response.content[0].type === "text") {
+        queryInfo = response.content[0].text.trim();
+      }
     } else if (this.ollama) {
       const response = await this.ollama.chat({
         model: this.model,
