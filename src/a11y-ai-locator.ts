@@ -319,6 +319,7 @@ ${bodyContent}
           const grandparent = parent.parent();
           
           // Add the grandparent's HTML if it's not too large
+          // AI! fix the undefined ts errors
           if (grandparent.html()?.length < 5000) {
             contextHTML += grandparent.clone().wrap('<div>').parent().html() + '\n';
           } else if (parent.html()?.length < 5000) {
