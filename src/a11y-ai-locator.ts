@@ -166,6 +166,7 @@ export class A11yAILocator {
       this.cachedBodyContent = bodyContent;
     }
 
+    // AI! this prompt will occasionally return additional data.  Modify it so that it returns JSON like {"query": "getByRole", "params": ["button", "Submit"]}
     const prompt = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
 determine the most appropriate Testing Library query to locate that element.
@@ -179,6 +180,8 @@ getByText: Sign up now
 getByLabelText: Email address
 getByPlaceholderText: Enter your name
 getByTestId: login-form
+
+IMPORTANT: you must return only the queryName and parameters and nothing else.
 
 STRICT PRIORITY ORDER - You MUST follow this order when selecting a query type:
 
