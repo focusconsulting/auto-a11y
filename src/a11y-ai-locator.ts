@@ -214,7 +214,12 @@ ${bodyContent}
         });
         
         const response = await Promise.race([responsePromise, timeoutPromise]);
-        queryInfo = response.content[0].text.trim();
+        const textContent = response.content.find(item => item.type === "text");
+        if (textContent && 'text' in textContent) {
+          queryInfo = textContent.text.trim();
+        } else {
+          throw new Error('No text content found in Anthropic response');
+        }
       } else if (this.ollama) {
         const responsePromise = this.ollama.chat({
           model: this.model,
@@ -286,7 +291,7 @@ ${bodyContent}
       $('*').each((_, el) => {
         const element = $(el);
         // Remove all data-* attributes except data-testid
-        Object.keys(el.attribs || {})
+        Object.keys(element.attr())
           .filter(attr => attr.startsWith('data-') && attr !== 'data-testid')
           .forEach(attr => element.removeAttr(attr));
         
@@ -299,7 +304,7 @@ ${bodyContent}
       
       // Try to find elements that might match the description
       const searchTerms = description.toLowerCase().split(/\s+/);
-      let relevantElements: cheerio.Cheerio = $();
+      let relevantElements: cheerio.Cheerio = $("");
       
       // Look for elements containing text similar to the description
       $('body *').each((_, el) => {
@@ -372,12 +377,13 @@ ${bodyContent}
     $('*').each((_, el) => {
       const element = $(el);
       // Keep only elements that might be interactive or contain text
-      const tagName = el.tagName.toLowerCase();
+      // AI! fix the error: Property 'tagName' does not exist on type 'Cheerio'.
+      const tagName = element.tagName.toLowerCase();
       const isImportant = ['a', 'button', 'input', 'select', 'textarea', 'label', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p'].includes(tagName);
       
       if (!isImportant && !element.has('a, button, input, select, textarea, label').length) {
         // Remove attributes except role, aria-* and data-testid
-        const attribs = {...el.attribs};
+        const attribs =element.attr();
         Object.keys(attribs).forEach(attr => {
           if (attr !== 'role' && !attr.startsWith('aria-') && attr !== 'data-testid') {
             element.removeAttr(attr);
