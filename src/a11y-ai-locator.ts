@@ -182,6 +182,7 @@ getByTestId: login-form
 
 STRICT PRIORITY ORDER - You MUST follow this order when selecting a query type:
 
+// AI! make the getByRole stricter so that it can only return valid ARIA roles.  It currently's returns getByRole("paragraph")
 1. getByRole - HIGHEST PRIORITY
    - Use whenever possible if the element has a semantic role and accessible name
    - Examples: getByRole: button, Submit | getByRole: heading, Welcome | getByRole: checkbox, Accept terms
