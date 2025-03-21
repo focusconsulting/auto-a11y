@@ -286,7 +286,6 @@ ${bodyContent}
       $('*').each((_, el) => {
         const element = $(el);
         // Remove all data-* attributes except data-testid
-        // AI! Fix the error that attribs does not exist
         Object.keys(el.attribs || {})
           .filter(attr => attr.startsWith('data-') && attr !== 'data-testid')
           .forEach(attr => element.removeAttr(attr));
