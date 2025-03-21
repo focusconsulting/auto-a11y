@@ -5,17 +5,17 @@
       "heading"
     ]
   },
-  "the main paragraph on the page": {
-    "queryName": "getByText",
-    "params": [
-      "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission."
-    ]
-  },
   "link about more information": {
     "queryName": "getByRole",
     "params": [
       "link",
-      "More information..."
+      "More information"
+    ]
+  },
+  "the main paragraph on the page": {
+    "queryName": "getByText",
+    "params": [
+      "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission."
     ]
   }
 }

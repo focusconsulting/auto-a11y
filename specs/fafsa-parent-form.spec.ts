@@ -7,6 +7,9 @@ test("should complete the FAFSA parent application form wizard", async ({
   // Create an instance of A11yAILocator
 
   const context = await browser.newContext({
+    recordVideo: {
+      dir: "./"
+    },
     // Force HTTP/1.1 instead of HTTP/2
     extraHTTPHeaders: {
       Connection: "keep-alive",
@@ -20,7 +23,7 @@ test("should complete the FAFSA parent application form wizard", async ({
   });
   // Create a new page from our custom context
   const page = await context.newPage();
-  const a11yLocator = createA11yAILocator(page, testInfo, {model: "claude-3-7-sonnet-latest"});
+  const a11yLocator = createA11yAILocator(page, testInfo);
 
   // Navigate to the FAFSA parent application page
   await page.goto("https://studentaid.gov/fafsa-apply/parents");
@@ -78,4 +81,5 @@ test("should complete the FAFSA parent application form wizard", async ({
 
   // Take a screenshot of the completed form
   await page.screenshot({ path: "fafsa-parent-form-completed.png" });
+  await context.close()
 });

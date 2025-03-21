@@ -9,6 +9,8 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@hono/node-server": "^1.1.1",
     "@testing-library/dom": "^9.3.3",
+    "@types/cheerio": "^0.22.35",
+    "cheerio": "^1.0.0",
     "hono": "^4.0.0",
     "ollama": "^0.4.0",
     "openai": "^4.17.3",
