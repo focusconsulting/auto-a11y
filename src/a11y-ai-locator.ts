@@ -54,12 +54,17 @@ export class A11yAILocator {
     } else {
       // Try to get test info from page context
       if (testInfo.title) {
+        // Get the test file path and create a snapshot directory next to it
+        const testFilePath = testInfo.file;
+        const testDir = path.dirname(testFilePath);
+        const testFileName = path.basename(testFilePath, path.extname(testFilePath));
+        
         // Create snapshots directory if it doesn't exist
-        // AI! update this so the snapshots are created in the directory of the test and with the name of the test so example.spec.ts should be __example-locator-snapshots__
-        const snapshotsDir = path.join(process.cwd(), "locator-snapshots");
+        const snapshotsDir = path.join(testDir, `__${testFileName}-locator-snapshots__`);
         if (!fs.existsSync(snapshotsDir)) {
           fs.mkdirSync(snapshotsDir, { recursive: true });
         }
+        
         // Use test name for snapshot file
         this.snapshotFilePath = path.join(
           snapshotsDir,
