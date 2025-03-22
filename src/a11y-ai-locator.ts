@@ -165,6 +165,7 @@ export class A11yAILocator {
       this.lastHtml = html;
       this.cachedBodyContent = bodyContent;
     }
+    console.log(bodyContent)
 
     const prompt = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
@@ -350,7 +351,7 @@ Query:
 
       // Remove scripts and styles
       $("script, style").remove();
-
+      // AI! also remove any svg or inline images
       // Remove data attributes and classes
       $("*").each((_, el) => {
         const element = $(el);
