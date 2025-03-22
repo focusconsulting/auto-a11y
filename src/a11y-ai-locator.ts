@@ -371,8 +371,9 @@ Query:
         const $el = $(el);
         const $parent = $el.parent();
         if ($parent.children().length === 1 && !$el.is("button, a, input, select, textarea")) {
-          // AI! according to the compiler unwrap does not exist
-          $el.children().unwrap();
+          // Replace the parent with its children
+          const $children = $el.children();
+          $el.replaceWith($children);
         }
       });
       
