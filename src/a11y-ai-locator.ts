@@ -165,6 +165,7 @@ export class A11yAILocator {
       this.lastHtml = html;
       this.cachedBodyContent = bodyContent;
     }
+    // AI! if the body content is greater than 80,000 characters save it to a file called body content
     console.log(bodyContent)
 
     const prompt = `
