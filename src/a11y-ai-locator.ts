@@ -166,7 +166,6 @@ export class A11yAILocator {
       this.cachedBodyContent = bodyContent;
     }
 
-    // AI! some models are returning ```json {the query}``` which then fails to parse.  Update the prompt or the result parsing
     const prompt = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
 determine the most appropriate Testing Library query to locate that element.
@@ -271,12 +270,20 @@ Query:
       let queryParams: string[];
       
       try {
-        const jsonResponse = JSON.parse(queryInfo);
+        // First try to extract JSON if it's wrapped in markdown code blocks
+        let jsonString = queryInfo;
+        const jsonRegex = /```(?:json)?\s*({[\s\S]*?})\s*```/;
+        const match = queryInfo.match(jsonRegex);
+        
+        if (match && match[1]) {
+          jsonString = match[1];
+        }
+        
+        const jsonResponse = JSON.parse(jsonString);
         queryName = jsonResponse.query;
         queryParams = jsonResponse.params || [];
       } catch (error) {
         console.warn(`Failed to parse JSON response: ${error}. Falling back to text parsing.`);
-        console.warn(queryInfo)
         
         // Fallback to the old text parsing method
         const [name, ...params] = queryInfo
@@ -536,7 +543,16 @@ ${simplifiedHTML}
 
     // Parse the JSON response
     try {
-      const jsonResponse = JSON.parse(queryInfo);
+      // First try to extract JSON if it's wrapped in markdown code blocks
+      let jsonString = queryInfo;
+      const jsonRegex = /```(?:json)?\s*({[\s\S]*?})\s*```/;
+      const match = queryInfo.match(jsonRegex);
+      
+      if (match && match[1]) {
+        jsonString = match[1];
+      }
+      
+      const jsonResponse = JSON.parse(jsonString);
       const queryName = jsonResponse.query;
       const queryParams = jsonResponse.params || [];
       return { queryName, params: queryParams };
