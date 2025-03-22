@@ -28,7 +28,7 @@ export class A11yAILocator {
     } = {}
   ) {
     this.page = page;
-    this.timeout = options.timeout || 30000; // Default 30 seconds
+    this.timeout = options.timeout || 60000; // Default 30 seconds
 
     // Determine which AI provider to use based on the model
     if (
@@ -166,6 +166,7 @@ export class A11yAILocator {
       this.cachedBodyContent = bodyContent;
     }
 
+    // AI! some models are returning ```json {the query}``` which then fails to parse.  Update the prompt or the result parsing
     const prompt = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
 determine the most appropriate Testing Library query to locate that element.
@@ -219,6 +220,8 @@ Description: ${description}
 
 HTML:
 ${bodyContent}
+
+Query:
 `;
 
     try {
@@ -232,6 +235,7 @@ ${bodyContent}
 
       // Make the AI request with timeout
       let queryInfo: string;
+      console.log(`Prompt size is: ${prompt.length}`)
       if (this.aiProvider === "anthropic" && this.anthropic) {
         const responsePromise = this.anthropic.messages.create({
           model: this.model,
@@ -272,6 +276,7 @@ ${bodyContent}
         queryParams = jsonResponse.params || [];
       } catch (error) {
         console.warn(`Failed to parse JSON response: ${error}. Falling back to text parsing.`);
+        console.warn(queryInfo)
         
         // Fallback to the old text parsing method
         const [name, ...params] = queryInfo
@@ -475,6 +480,7 @@ ${bodyContent}
       }
     });
 
+    
     // Get simplified HTML
     const simplifiedHTML = $("body").html() || $.html();
 
@@ -496,6 +502,7 @@ ${simplifiedHTML}
 
     // Get the query suggestion from the appropriate AI provider
     let queryInfo: string;
+    console.log(`Prompt size is: ${prompt.length}`)
     if (this.aiProvider === "anthropic" && this.anthropic) {
       const response = await this.anthropic.messages.create({
         model: this.model,
@@ -558,7 +565,7 @@ ${simplifiedHTML}
       return { queryName, params: queryParams };
     }
 
-    return { queryName, params: queryParams };
+    // return { queryName, params: queryParams };
   }
 
   /**
