@@ -362,6 +362,7 @@ Query:
     try {
       const $ = cheerio.load(html);
 
+      // AI! often the html will have a lot of extra HTML markup that is not relevant ie <div><div><button role="button">Button</button></div></div> adjust the code to remove irrelevant html markup
       // Remove scripts, styles, SVGs, and inline images
       $("script, style, svg").remove();
       $("img[src^='data:']").remove();
