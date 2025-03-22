@@ -349,9 +349,9 @@ Query:
     try {
       const $ = cheerio.load(html);
 
-      // Remove scripts and styles
-      $("script, style").remove();
-      // AI! also remove any svg or inline images
+      // Remove scripts, styles, SVGs, and inline images
+      $("script, style, svg").remove();
+      $("img[src^='data:']").remove();
       // Remove data attributes and classes
       $("*").each((_, el) => {
         const element = $(el);
