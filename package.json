@@ -1,6 +1,6 @@
 {
   "name": "@focusconsulting/auto-a11y",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "description": "A powerful tool that combines AI with accessibility-first element selection for Playwright tests",
