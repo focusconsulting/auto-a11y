@@ -3,3 +3,4 @@ node_modules
 .playwright-artifacts-*
 
 playwright-report/
+dist/

@@ -165,20 +165,6 @@ export class A11yAILocator {
       this.lastHtml = html;
       this.cachedBodyContent = bodyContent;
     }
-    // Save large body content to a file for debugging if needed
-    if (bodyContent.length > 80000) {
-      try {
-        const debugDir = path.join(process.cwd(), 'debug');
-        if (!fs.existsSync(debugDir)) {
-          fs.mkdirSync(debugDir, { recursive: true });
-        }
-        const filename = path.join(debugDir, `body-content-${Date.now()}.html`);
-        fs.writeFileSync(filename, bodyContent, 'utf8');
-        console.log(`Body content saved to ${filename} (${bodyContent.length} characters)`);
-      } catch (error) {
-        console.warn(`Failed to save body content to file: ${error}`);
-      }
-    }
 
     const prompt = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
