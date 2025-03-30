@@ -223,6 +223,8 @@ export class A11yAILocator {
     }
   }
 
+
+  // AI! move extractBodyContent into a new file call sanitize-html.ts
   /**
    * Extracts and sanitizes the body content from HTML
    * @param html The full HTML content
