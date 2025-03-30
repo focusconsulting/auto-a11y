@@ -54,29 +54,31 @@ export class A11yAILocator {
     if (options.snapshotFilePath) {
       this.snapshotFilePath = options.snapshotFilePath;
     } else {
-      // Try to get test info from page context
-      if (testInfo.title) {
-        // Get the test file path and create a snapshot directory next to it
-        const testFilePath = testInfo.file;
-        const testDir = path.dirname(testFilePath);
-        const testFileName = path.basename(testFilePath, path.extname(testFilePath));
-        
-        // Create snapshots directory if it doesn't exist
-        const snapshotsDir = path.join(testDir, `__${testFileName}-locator-snapshots__`);
-        if (!fs.existsSync(snapshotsDir)) {
-          fs.mkdirSync(snapshotsDir, { recursive: true });
-        }
-        
-        // Use test name for snapshot file
-        this.snapshotFilePath = path.join(
-          snapshotsDir,
-          `${testInfo.title.replace(/\s+/g, "-")}.json`
-        );
-      } else {
-        this.snapshotFilePath = null;
+      // Get the test file path and create a snapshot directory next to it
+      const testFilePath = testInfo.file;
+      const testDir = path.dirname(testFilePath);
+      const testFileName = path.basename(
+        testFilePath,
+        path.extname(testFilePath)
+      );
+
+      // Create snapshots directory if it doesn't exist
+      const snapshotsDir = path.join(
+        testDir,
+        `__${testFileName}-locator-snapshots__`
+      );
+      if (!fs.existsSync(snapshotsDir)) {
+        fs.mkdirSync(snapshotsDir, { recursive: true });
       }
+
+      // AI! extract the creation of the snapshot path into snapshot-manager.ts
+      // Use test name for snapshot file
+      this.snapshotFilePath = path.join(
+        snapshotsDir,
+        `${testInfo.title.replace(/\s+/g, "-")}.json`
+      );
     }
-    
+
     // Initialize the snapshot manager
     this.snapshotManager = new SnapshotManager(this.snapshotFilePath);
   }
@@ -185,7 +187,7 @@ Query:
 
       // Make the AI request with timeout
       let queryInfo: string;
-      console.log(`Prompt size is: ${prompt.length}`)
+      console.log(`Prompt size is: ${prompt.length}`);
       if (this.aiProvider === "anthropic" && this.anthropic) {
         const responsePromise = this.anthropic.messages.create({
           model: this.model,
@@ -219,30 +221,32 @@ Query:
       // Parse the JSON response
       let queryName: string;
       let queryParams: string[];
-      
+
       try {
         // First try to extract JSON if it's wrapped in markdown code blocks
         let jsonString = queryInfo;
         const jsonRegex = /```(?:json)?\s*({[\s\S]*?})\s*```/;
         const match = queryInfo.match(jsonRegex);
-        
+
         if (match && match[1]) {
           jsonString = match[1];
         }
-        
+
         const jsonResponse = JSON.parse(jsonString);
         queryName = jsonResponse.query;
         queryParams = jsonResponse.params || [];
       } catch (error) {
-        console.warn(`Failed to parse JSON response: ${error}. Falling back to text parsing.`);
-        
+        console.warn(
+          `Failed to parse JSON response: ${error}. Falling back to text parsing.`
+        );
+
         // Fallback to the old text parsing method
         const [name, ...params] = queryInfo
           .split(":")
           .map((part) => part.trim());
-          
+
         queryName = name;
-        
+
         // Handle parameters more carefully to avoid splitting text that contains commas
         if (queryName.toLowerCase() === "getbytext") {
           queryParams = [params.join(":").trim()];
@@ -256,7 +260,10 @@ Query:
       }
 
       // Save the snapshot for future use
-      this.snapshotManager.saveSnapshot(description, { queryName, params: queryParams });
+      this.snapshotManager.saveSnapshot(description, {
+        queryName,
+        params: queryParams,
+      });
 
       // Execute the appropriate Testing Library query
       return this.executeTestingLibraryQuery(queryName, queryParams);
@@ -302,21 +309,24 @@ Query:
       // Remove scripts, styles, SVGs, and inline images
       $("script, style, svg").remove();
       $("img[src^='data:']").remove();
-      
+
       // Simplify deeply nested structures
       $("div > div:only-child").each((_, el) => {
         const $el = $(el);
         const $parent = $el.parent();
-        if ($parent.children().length === 1 && !$el.is("button, a, input, select, textarea")) {
+        if (
+          $parent.children().length === 1 &&
+          !$el.is("button, a, input, select, textarea")
+        ) {
           // Replace the parent with its children
           const $children = $el.children();
           $el.replaceWith($children);
         }
       });
-      
+
       // Remove empty containers
       $("div:empty, span:empty").remove();
-      
+
       // Remove data attributes and classes
       $("*").each((_, el) => {
         const element = $(el);
@@ -453,7 +463,6 @@ Query:
       }
     });
 
-    
     // Get simplified HTML
     const simplifiedHTML = $("body").html() || $.html();
 
@@ -475,7 +484,7 @@ ${simplifiedHTML}
 
     // Get the query suggestion from the appropriate AI provider
     let queryInfo: string;
-    console.log(`Prompt size is: ${prompt.length}`)
+    console.log(`Prompt size is: ${prompt.length}`);
     if (this.aiProvider === "anthropic" && this.anthropic) {
       const response = await this.anthropic.messages.create({
         model: this.model,
@@ -513,18 +522,20 @@ ${simplifiedHTML}
       let jsonString = queryInfo;
       const jsonRegex = /```(?:json)?\s*({[\s\S]*?})\s*```/;
       const match = queryInfo.match(jsonRegex);
-      
+
       if (match && match[1]) {
         jsonString = match[1];
       }
-      
+
       const jsonResponse = JSON.parse(jsonString);
       const queryName = jsonResponse.query;
       const queryParams = jsonResponse.params || [];
       return { queryName, params: queryParams };
     } catch (error) {
-      console.warn(`Failed to parse JSON response: ${error}. Falling back to text parsing.`);
-      
+      console.warn(
+        `Failed to parse JSON response: ${error}. Falling back to text parsing.`
+      );
+
       // Fallback to the old text parsing method
       const [queryName, ...params] = queryInfo
         .split(":")
@@ -543,7 +554,7 @@ ${simplifiedHTML}
           .split(",")
           .map((p) => p.trim());
       }
-      
+
       return { queryName, params: queryParams };
     }
 
