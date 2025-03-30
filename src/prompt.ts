@@ -62,3 +62,26 @@ ${bodyContent}
 Query:
 `;
 }
+
+/**
+ * Creates a simplified prompt for AI to determine the most appropriate Testing Library query
+ * @param description Human description of the element to find
+ * @param simplifiedHTML Simplified HTML content of the page
+ * @returns Formatted prompt string
+ */
+export function createSimpleLocatorPrompt(description: string, simplifiedHTML: string): string {
+  return `
+Find the most appropriate Testing Library query for this element: "${description}"
+
+Return ONLY a JSON object with the following format:
+{"query": "queryName", "params": ["param1", "param2"]}
+
+For example:
+{"query": "getByRole", "params": ["button", "Submit"]}
+
+Priority order: getByRole (highest), getByLabelText, getByPlaceholderText, getByAltText, getByText, getByTestId (lowest)
+
+HTML:
+${simplifiedHTML}
+`;
+}

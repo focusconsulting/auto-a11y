@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as cheerio from "cheerio";
 import { SnapshotManager } from "./snapshot-manager";
-import { createLocatorPrompt } from "./prompt";
+import { createLocatorPrompt, createSimpleLocatorPrompt } from "./prompt";
 import { extractBodyContent } from "./sanitize-html";
 
 export class A11yAILocator {
@@ -281,22 +281,8 @@ export class A11yAILocator {
     // Get simplified HTML
     const simplifiedHTML = $("body").html() || $.html();
 
-    // AI! extract this prompt into prompt.ts as a function called createSimpleLocatorPrompt that takes a description and simplifiedHtml
     // Create a simplified prompt
-    const prompt = `
-Find the most appropriate Testing Library query for this element: "${description}"
-
-Return ONLY a JSON object with the following format:
-{"query": "queryName", "params": ["param1", "param2"]}
-
-For example:
-{"query": "getByRole", "params": ["button", "Submit"]}
-
-Priority order: getByRole (highest), getByLabelText, getByPlaceholderText, getByAltText, getByText, getByTestId (lowest)
-
-HTML:
-${simplifiedHTML}
-`;
+    const prompt = createSimpleLocatorPrompt(description, simplifiedHTML);
 
     // Get the query suggestion from the appropriate AI provider
     let queryInfo: string;
