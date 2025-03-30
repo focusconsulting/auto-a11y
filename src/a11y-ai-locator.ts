@@ -98,6 +98,7 @@ export class A11yAILocator {
     return {};
   }
 
+  // AI! extract saveSnapshot and readSnapshots into a new file
   /**
    * Saves a locator to the snapshot file
    * @param description The element description
