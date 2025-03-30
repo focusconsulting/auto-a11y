@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import * as fs from "fs";
 import * as path from "path";
 import * as cheerio from "cheerio";
+import { SnapshotManager } from "./snapshot-manager";
 
 export class A11yAILocator {
   private page: Page;
@@ -15,6 +16,7 @@ export class A11yAILocator {
   private cachedBodyContent: string | null = null;
   private lastHtml: string | null = null;
   private timeout: number;
+  private snapshotManager: SnapshotManager;
 
   constructor(
     page: Page,
@@ -74,61 +76,9 @@ export class A11yAILocator {
         this.snapshotFilePath = null;
       }
     }
-  }
-
-  /**
-   * Reads locator snapshots from the snapshot file
-   * @returns Object containing saved locators or empty object if file doesn't exist
-   */
-  private readSnapshots(): Record<
-    string,
-    { queryName: string; params: string[] }
-  > {
-    if (!this.snapshotFilePath) return {};
-
-    try {
-      if (fs.existsSync(this.snapshotFilePath)) {
-        const data = fs.readFileSync(this.snapshotFilePath, "utf8");
-        return JSON.parse(data);
-      }
-    } catch (error) {
-      console.warn(`Failed to read locator snapshots: ${error}`);
-    }
-
-    return {};
-  }
-
-  // AI! extract saveSnapshot and readSnapshots into a new file
-  /**
-   * Saves a locator to the snapshot file
-   * @param description The element description
-   * @param queryInfo The query information to save
-   */
-  private saveSnapshot(
-    description: string,
-    queryInfo: { queryName: string; params: string[] }
-  ): void {
-    if (!this.snapshotFilePath) return;
-
-    try {
-      // Ensure directory exists
-      const dir = path.dirname(this.snapshotFilePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-
-      // Read existing snapshots
-      const snapshots = this.readSnapshots();
-
-      // Add or update the snapshot
-      snapshots[description] = queryInfo;
-
-      // Write back to file with a replacer function to avoid escaping single quotes
-      const jsonString = JSON.stringify(snapshots, null, 2);
-      fs.writeFileSync(this.snapshotFilePath, jsonString, "utf8");
-    } catch (error) {
-      console.warn(`Failed to save locator snapshot: ${error}`);
-    }
+    
+    // Initialize the snapshot manager
+    this.snapshotManager = new SnapshotManager(this.snapshotFilePath);
   }
 
   /**
@@ -138,7 +88,7 @@ export class A11yAILocator {
    */
   async locate(description: string): Promise<Locator> {
     // Check if we have a saved snapshot for this description
-    const snapshots = this.readSnapshots();
+    const snapshots = this.snapshotManager.readSnapshots();
     if (snapshots[description]) {
       const { queryName, params } = snapshots[description];
       const locator = this.executeTestingLibraryQuery(queryName, params);
@@ -306,7 +256,7 @@ Query:
       }
 
       // Save the snapshot for future use
-      this.saveSnapshot(description, { queryName, params: queryParams });
+      this.snapshotManager.saveSnapshot(description, { queryName, params: queryParams });
 
       // Execute the appropriate Testing Library query
       return this.executeTestingLibraryQuery(queryName, queryParams);
@@ -323,7 +273,7 @@ Query:
         );
 
         // Save the snapshot for future use
-        this.saveSnapshot(description, { queryName, params });
+        this.snapshotManager.saveSnapshot(description, { queryName, params });
 
         // Execute the appropriate Testing Library query
         return this.executeTestingLibraryQuery(queryName, params);
