@@ -54,29 +54,7 @@ export class A11yAILocator {
     if (options.snapshotFilePath) {
       this.snapshotFilePath = options.snapshotFilePath;
     } else {
-      // Get the test file path and create a snapshot directory next to it
-      const testFilePath = testInfo.file;
-      const testDir = path.dirname(testFilePath);
-      const testFileName = path.basename(
-        testFilePath,
-        path.extname(testFilePath)
-      );
-
-      // Create snapshots directory if it doesn't exist
-      const snapshotsDir = path.join(
-        testDir,
-        `__${testFileName}-locator-snapshots__`
-      );
-      if (!fs.existsSync(snapshotsDir)) {
-        fs.mkdirSync(snapshotsDir, { recursive: true });
-      }
-
-      // AI! extract the creation of the snapshot path into snapshot-manager.ts
-      // Use test name for snapshot file
-      this.snapshotFilePath = path.join(
-        snapshotsDir,
-        `${testInfo.title.replace(/\s+/g, "-")}.json`
-      );
+      this.snapshotFilePath = SnapshotManager.createSnapshotPath(testInfo);
     }
 
     // Initialize the snapshot manager

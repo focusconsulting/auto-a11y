@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { TestInfo } from "@playwright/test";
 
 /**
  * Class to manage saving and loading locator snapshots
@@ -9,6 +10,36 @@ export class SnapshotManager {
 
   constructor(snapshotFilePath: string | null) {
     this.snapshotFilePath = snapshotFilePath;
+  }
+
+  /**
+   * Creates a snapshot file path based on test information
+   * @param testInfo Playwright TestInfo object
+   * @returns Path to the snapshot file
+   */
+  static createSnapshotPath(testInfo: TestInfo): string {
+    // Get the test file path and create a snapshot directory next to it
+    const testFilePath = testInfo.file;
+    const testDir = path.dirname(testFilePath);
+    const testFileName = path.basename(
+      testFilePath,
+      path.extname(testFilePath)
+    );
+
+    // Create snapshots directory if it doesn't exist
+    const snapshotsDir = path.join(
+      testDir,
+      `__${testFileName}-locator-snapshots__`
+    );
+    if (!fs.existsSync(snapshotsDir)) {
+      fs.mkdirSync(snapshotsDir, { recursive: true });
+    }
+
+    // Use test name for snapshot file
+    return path.join(
+      snapshotsDir,
+      `${testInfo.title.replace(/\s+/g, "-")}.json`
+    );
   }
 
   /**
