@@ -281,6 +281,7 @@ export class A11yAILocator {
     // Get simplified HTML
     const simplifiedHTML = $("body").html() || $.html();
 
+    // AI! extract this prompt into prompt.ts as a function called createSimpleLocatorPrompt that takes a description and simplifiedHtml
     // Create a simplified prompt
     const prompt = `
 Find the most appropriate Testing Library query for this element: "${description}"
