@@ -1,10 +1,11 @@
+import { LocatorQuerySchema } from "./locator-schema";
+
 /**
  * Creates a prompt for AI to determine the most appropriate Testing Library query
  * @param description Human description of the element to find
  * @param bodyContent HTML content of the page
  * @returns Formatted prompt string
  */
-// AI! extract a zod schema that aligns with what I hope this prompt will produce
 export function createLocatorPrompt(description: string, bodyContent: string): string {
   return `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
@@ -71,6 +72,9 @@ Query:
  * @returns Formatted prompt string
  */
 export function createSimpleLocatorPrompt(description: string, simplifiedHTML: string): string {
+
+// Re-export the schema for convenience
+export { LocatorQuerySchema, LocatorQuery } from "./locator-schema";
   return `
 Find the most appropriate Testing Library query for this element: "${description}"
 
