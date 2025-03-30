@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as cheerio from "cheerio";
 import { SnapshotManager } from "./snapshot-manager";
-import { LOCATOR_PROMPT } from "./prompt";
+import { createLocatorPrompt } from "./prompt";
 import { extractBodyContent } from "./sanitize-html";
 
 export class A11yAILocator {
@@ -99,10 +99,8 @@ export class A11yAILocator {
       this.cachedBodyContent = bodyContent;
     }
 
-    // Format the prompt with the description and body content
-    const prompt = LOCATOR_PROMPT
-      .replace('${description}', description)
-      .replace('${bodyContent}', bodyContent);
+    // Create the prompt with the description and body content
+    const prompt = createLocatorPrompt(description, bodyContent);
 
     try {
       // Set up a timeout for the AI request

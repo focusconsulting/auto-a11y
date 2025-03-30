@@ -1,8 +1,11 @@
 /**
- * Prompt template for AI to determine the most appropriate Testing Library query
+ * Creates a prompt for AI to determine the most appropriate Testing Library query
+ * @param description Human description of the element to find
+ * @param bodyContent HTML content of the page
+ * @returns Formatted prompt string
  */
-// AI! this needs to be a function so that description and bodyContent can be passed as parameter
-export const LOCATOR_PROMPT = `
+export function createLocatorPrompt(description: string, bodyContent: string): string {
+  return `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
 determine the most appropriate Testing Library query to locate that element.
 
@@ -51,10 +54,11 @@ STRICT PRIORITY ORDER - You MUST follow this order when selecting a query type:
    - Only use as a last resort when no other query would work
    - Example: getByTestId: login-form
 
-Description: \${description}
+Description: ${description}
 
 HTML:
-\${bodyContent}
+${bodyContent}
 
 Query:
 `;
+}
