@@ -97,6 +97,7 @@ export class A11yAILocator {
       this.cachedBodyContent = bodyContent;
     }
 
+    // AI! extract the prompt into a global const in a new file prompt.ts
     const prompt = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
 determine the most appropriate Testing Library query to locate that element.
