@@ -4,6 +4,7 @@
  * @param bodyContent HTML content of the page
  * @returns Formatted prompt string
  */
+// AI! extract a zod schema that aligns with what I hope this prompt will produce
 export function createLocatorPrompt(description: string, bodyContent: string): string {
   return `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
