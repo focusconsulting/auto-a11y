@@ -1,6 +1,7 @@
 /**
  * Prompt template for AI to determine the most appropriate Testing Library query
  */
+// AI! this needs to be a function so that description and bodyContent can be passed as parameter
 export const LOCATOR_PROMPT = `
 You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
 determine the most appropriate Testing Library query to locate that element.
