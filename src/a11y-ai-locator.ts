@@ -6,7 +6,7 @@ import * as path from "path";
 import * as cheerio from "cheerio";
 import { SnapshotManager } from "./snapshot-manager";
 import { createLocatorPrompt, createSimpleLocatorPrompt, LocatorQuery, LocatorQuerySchema } from "./prompt";
-import { extractBodyContent } from "./sanitize-html";
+import { extractBodyContent, simplifyHtml } from "./sanitize-html";
 import zodToJsonSchema from "zod-to-json-schema";
 
 export class A11yAILocator {
@@ -170,53 +170,7 @@ export class A11yAILocator {
     html: string
   ): Promise<{ queryName: string; params: string[] }> {
     // Create a much more simplified version of the HTML
-    // AI! move the code that simplifies the html into a function in sanitize-html.ts
-    const $ = cheerio.load(html);
-
-    // Keep only essential elements and their text content
-    $("*").each((_, el) => {
-      const element = $(el);
-      // Keep only elements that might be interactive or contain text
-
-      if (el.type == "tag") {
-        const tagName = el.tagName?.toLowerCase() || "";
-        const isImportant = [
-          "a",
-          "button",
-          "input",
-          "select",
-          "textarea",
-          "label",
-          "h1",
-          "h2",
-          "h3",
-          "h4",
-          "h5",
-          "h6",
-          "p",
-        ].includes(tagName);
-
-        if (
-          !isImportant &&
-          !element.has("a, button, input, select, textarea, label").length
-        ) {
-          // Remove attributes except role, aria-* and data-testid
-          const attribs = element.attr();
-          Object.keys(attribs).forEach((attr) => {
-            if (
-              attr !== "role" &&
-              !attr.startsWith("aria-") &&
-              attr !== "data-testid"
-            ) {
-              element.removeAttr(attr);
-            }
-          });
-        }
-      }
-    });
-
-    // Get simplified HTML
-    const simplifiedHTML = $("body").html() || $.html();
+    const simplifiedHTML = simplifyHtml(html);
 
     // Create a simplified prompt
     const prompt = createSimpleLocatorPrompt(description, simplifiedHTML);
