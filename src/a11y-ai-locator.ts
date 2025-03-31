@@ -3,9 +3,7 @@ import { Ollama } from "ollama";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import * as fs from "fs";
-import * as path from "path";
-import * as cheerio from "cheerio";
+
 import { SnapshotManager } from "./snapshot-manager";
 import { createLocatorPrompt, createSimpleLocatorPrompt, LocatorQuery, LocatorQuerySchema } from "./prompt";
 import { extractBodyContent, simplifyHtml } from "./sanitize-html";
@@ -36,11 +34,12 @@ export class A11yAILocator {
       timeout?: number;
     } = {}
   ) {
+    // AI! there should be no default model, it must be passed, the providers are anthropic:claude 3-7, openai: gpt-4o , gemini: 2.5-pro, deepseek: v2, bedrock: required to be specified and ollama: required to be specified
     this.page = page;
     this.timeout = options.timeout || 60000; // Default 60 seconds
 
     // Determine which AI provider to use based on the model and options
-    this.model = options.model || "deep-seek-auto-a11y"; // Default model
+    this.model = options.model || "deepseek-coder-v2"; // Default model
 
     if (this.model.startsWith("claude-")) {
       this.aiProvider = "anthropic";
