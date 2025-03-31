@@ -225,7 +225,7 @@ export class A11yAILocator {
         );
       });
       const locatorQuery = this.testInstance ? 
-        await this.testInstance.step(`auto-a11y: locating: ${description}`, async () => {
+        await this.testInstance.step(`auto-a11y locating: ${description}`, async () => {
           // Make the AI request with timeout
           const queryInfo = await this.executePrompt(prompt, {
             useTimeout: true,
@@ -492,6 +492,7 @@ export class A11yAILocator {
   }
 }
 
+// AI! testInstance is required and should be passed as the third parameter by itself
 // Helper function to create an A11yAILocator instance
 export function createA11yAILocator(
   page: Page,
