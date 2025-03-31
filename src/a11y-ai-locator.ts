@@ -492,11 +492,11 @@ export class A11yAILocator {
   }
 }
 
-// AI! testInstance is required and should be passed as the third parameter by itself
 // Helper function to create an A11yAILocator instance
 export function createA11yAILocator(
   page: Page,
   testInfo: TestInfo,
+  testInstance: any,
   options: {
     model?: string;
     provider:
@@ -510,8 +510,7 @@ export function createA11yAILocator(
     snapshotFilePath?: string;
     apiKey?: string;
     timeout?: number;
-    testInstance?: any;
   }
 ): A11yAILocator {
-  return new A11yAILocator(page, testInfo, options);
+  return new A11yAILocator(page, testInfo, { ...options, testInstance });
 }
