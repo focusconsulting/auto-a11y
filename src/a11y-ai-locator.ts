@@ -63,31 +63,42 @@ export class A11yAILocator {
       this.model = options.model;
     }
 
-    // AI! always check that API key is available otherwise throw an error
     // Initialize the appropriate client based on the provider
     switch (this.aiProvider) {
       case "anthropic":
+        const anthropicApiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
+        if (!anthropicApiKey) {
+          throw new Error("Anthropic API key is required. Provide it via options.apiKey or ANTHROPIC_API_KEY environment variable.");
+        }
         this.anthropic = new Anthropic({
-          apiKey: options.apiKey || process.env.ANTHROPIC_API_KEY || "",
+          apiKey: anthropicApiKey,
         });
         break;
       case "openai":
+        const openaiApiKey = options.apiKey || process.env.OPENAI_API_KEY;
+        if (!openaiApiKey) {
+          throw new Error("OpenAI API key is required. Provide it via options.apiKey or OPENAI_API_KEY environment variable.");
+        }
         this.openai = new OpenAI({
-          apiKey: options.apiKey || process.env.OPENAI_API_KEY || "",
+          apiKey: openaiApiKey,
           baseURL: options.baseUrl, // Allow overriding for Azure OpenAI etc.
         });
         break;
       case "gemini":
-        const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
-        if (!apiKey) {
+        const geminiApiKey = options.apiKey || process.env.GEMINI_API_KEY;
+        if (!geminiApiKey) {
           throw new Error("Gemini API key is required. Provide it via options.apiKey or GEMINI_API_KEY environment variable.");
         }
-        this.googleAI = new GoogleGenerativeAI(apiKey);
+        this.googleAI = new GoogleGenerativeAI(geminiApiKey);
         break;
       case "deepseek":
         // DeepSeek uses OpenAI compatible API
+        const deepseekApiKey = options.apiKey || process.env.DEEPSEEK_API_KEY;
+        if (!deepseekApiKey) {
+          throw new Error("DeepSeek API key is required. Provide it via options.apiKey or DEEPSEEK_API_KEY environment variable.");
+        }
         this.openai = new OpenAI({
-          apiKey: options.apiKey || process.env.DEEPSEEK_API_KEY || "",
+          apiKey: deepseekApiKey,
           baseURL: options.baseUrl || "https://api.deepseek.com/v1", // Default DeepSeek API endpoint
         });
         break;
