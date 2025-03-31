@@ -2,10 +2,19 @@ import { Page, Locator, TestInfo } from "@playwright/test";
 import { Ollama } from "ollama";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import {
+  GoogleGenerativeAI,
+  HarmCategory,
+  HarmBlockThreshold,
+} from "@google/generative-ai";
 
 import { SnapshotManager } from "./snapshot-manager";
-import { createLocatorPrompt, createSimpleLocatorPrompt, LocatorQuery, LocatorQuerySchema } from "./prompt";
+import {
+  createLocatorPrompt,
+  createSimpleLocatorPrompt,
+  LocatorQuery,
+  LocatorQuerySchema,
+} from "./prompt";
 import { extractBodyContent, simplifyHtml } from "./sanitize-html";
 import zodToJsonSchema from "zod-to-json-schema";
 
@@ -16,7 +25,13 @@ export class A11yAILocator {
   private openai: OpenAI | null = null;
   private googleAI: GoogleGenerativeAI | null = null;
   private model: string;
-  private aiProvider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek" | "bedrock";
+  private aiProvider:
+    | "ollama"
+    | "anthropic"
+    | "openai"
+    | "gemini"
+    | "deepseek"
+    | "bedrock";
   private snapshotFilePath: string | null = null;
   private cachedBodyContent: string | null = null;
   private lastHtml: string | null = null;
@@ -28,7 +43,13 @@ export class A11yAILocator {
     testInfo: TestInfo,
     options: {
       model?: string;
-      provider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek" | "bedrock";
+      provider:
+        | "ollama"
+        | "anthropic"
+        | "openai"
+        | "gemini"
+        | "deepseek"
+        | "bedrock";
       baseUrl?: string;
       snapshotFilePath?: string;
       apiKey?: string;
@@ -70,7 +91,9 @@ export class A11yAILocator {
       case "anthropic":
         const anthropicApiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
         if (!anthropicApiKey) {
-          throw new Error("Anthropic API key is required. Provide it via options.apiKey or ANTHROPIC_API_KEY environment variable.");
+          throw new Error(
+            "Anthropic API key is required. Provide it via options.apiKey or ANTHROPIC_API_KEY environment variable."
+          );
         }
         this.anthropic = new Anthropic({
           apiKey: anthropicApiKey,
@@ -79,7 +102,9 @@ export class A11yAILocator {
       case "openai":
         const openaiApiKey = options.apiKey || process.env.OPENAI_API_KEY;
         if (!openaiApiKey) {
-          throw new Error("OpenAI API key is required. Provide it via options.apiKey or OPENAI_API_KEY environment variable.");
+          throw new Error(
+            "OpenAI API key is required. Provide it via options.apiKey or OPENAI_API_KEY environment variable."
+          );
         }
         this.openai = new OpenAI({
           apiKey: openaiApiKey,
@@ -89,7 +114,9 @@ export class A11yAILocator {
       case "gemini":
         const geminiApiKey = options.apiKey || process.env.GEMINI_API_KEY;
         if (!geminiApiKey) {
-          throw new Error("Gemini API key is required. Provide it via options.apiKey or GEMINI_API_KEY environment variable.");
+          throw new Error(
+            "Gemini API key is required. Provide it via options.apiKey or GEMINI_API_KEY environment variable."
+          );
         }
         this.googleAI = new GoogleGenerativeAI(geminiApiKey);
         break;
@@ -97,7 +124,9 @@ export class A11yAILocator {
         // DeepSeek uses OpenAI compatible API
         const deepseekApiKey = options.apiKey || process.env.DEEPSEEK_API_KEY;
         if (!deepseekApiKey) {
-          throw new Error("DeepSeek API key is required. Provide it via options.apiKey or DEEPSEEK_API_KEY environment variable.");
+          throw new Error(
+            "DeepSeek API key is required. Provide it via options.apiKey or DEEPSEEK_API_KEY environment variable."
+          );
         }
         this.openai = new OpenAI({
           apiKey: deepseekApiKey,
@@ -111,13 +140,17 @@ export class A11yAILocator {
         const bedrockApiKey = options.apiKey || process.env.AWS_ACCESS_KEY_ID;
         const bedrockSecretKey = process.env.AWS_SECRET_ACCESS_KEY;
         if (!bedrockApiKey || !bedrockSecretKey) {
-          throw new Error("AWS credentials are required for Bedrock. Provide AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.");
+          throw new Error(
+            "AWS credentials are required for Bedrock. Provide AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
+          );
         }
-        
+
         // Bedrock uses OpenAI compatible client
         this.openai = new OpenAI({
           apiKey: bedrockApiKey,
-          baseURL: options.baseUrl || `https://bedrock-runtime.us-east-1.amazonaws.com/model/${this.model}`,
+          baseURL:
+            options.baseUrl ||
+            `https://bedrock-runtime.us-east-1.amazonaws.com/model/${this.model}`,
         });
         break;
       case "ollama":
@@ -129,7 +162,6 @@ export class A11yAILocator {
         });
         break;
     }
-
 
     // Default to test name if available, otherwise use provided path or null
     if (options.snapshotFilePath) {
@@ -189,18 +221,20 @@ export class A11yAILocator {
           this.timeout
         );
       });
+      const locatorQuery =
+      // AI! extract test so its a parameter that is passed in
+        await test.step(`auto-a11y: locating: ${description}`, async () => {
+          // Make the AI request with timeout
+          const queryInfo = await this.executePrompt(prompt, {
+            useTimeout: true,
+            timeoutPromise,
+            systemPrompt:
+              "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
+            format: zodToJsonSchema(LocatorQuerySchema) as string,
+          });
 
-      // Make the AI request with timeout
-      const queryInfo = await this.executePrompt(prompt, {
-        useTimeout: true,
-        timeoutPromise,
-        systemPrompt: "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
-        format: zodToJsonSchema(LocatorQuerySchema) as string
-      });
-
-      const locatorQuery = LocatorQuerySchema.parse(JSON.parse(queryInfo));
-
-      
+          return LocatorQuerySchema.parse(JSON.parse(queryInfo));
+        });
 
       // Save the snapshot for future use
       this.snapshotManager.saveSnapshot(description, locatorQuery);
@@ -236,7 +270,6 @@ export class A11yAILocator {
     }
   }
 
-
   /**
    * Attempts to locate an element using simplified HTML when the main approach times out
    * @param description The element description
@@ -255,7 +288,7 @@ export class A11yAILocator {
 
     // Get the query suggestion from the appropriate AI provider
     const queryInfo = await this.executePrompt(prompt, {
-      systemPrompt: "Return only the query name and parameters. Be concise."
+      systemPrompt: "Return only the query name and parameters. Be concise.",
     });
 
     const locatorQuery = LocatorQuerySchema.parse(JSON.parse(queryInfo));
@@ -270,7 +303,7 @@ export class A11yAILocator {
    * @returns The AI response as a string
    */
   private async executePrompt(
-    prompt: string, 
+    prompt: string,
     options: {
       useTimeout?: boolean;
       timeoutPromise?: Promise<never>;
@@ -282,20 +315,21 @@ export class A11yAILocator {
       const responsePromise = this.anthropic.messages.create({
         model: this.model,
         max_tokens: 1024,
-        system: options.systemPrompt || "Return only the query name and parameters. Be concise.",
+        system:
+          options.systemPrompt ||
+          "Return only the query name and parameters. Be concise.",
         messages: [
-          { role: "user", content: prompt }, 
-          { role: "assistant", content: "{" }
+          { role: "user", content: prompt },
+          { role: "assistant", content: "{" },
         ],
       });
 
-      const response = options.useTimeout && options.timeoutPromise
-        ? await Promise.race([responsePromise, options.timeoutPromise])
-        : await responsePromise;
+      const response =
+        options.useTimeout && options.timeoutPromise
+          ? await Promise.race([responsePromise, options.timeoutPromise])
+          : await responsePromise;
 
-      const textContent = response.content.find(
-        (item) => item.type === "text"
-      );
+      const textContent = response.content.find((item) => item.type === "text");
       if (textContent && "text" in textContent) {
         return textContent.text.trim();
       } else {
@@ -307,16 +341,22 @@ export class A11yAILocator {
         max_tokens: 1024,
         response_format: options.format ? { type: "json_object" } : undefined,
         messages: [
-          { role: "system", content: options.systemPrompt || "Return only the query name and parameters. Be concise." },
+          {
+            role: "system",
+            content:
+              options.systemPrompt ||
+              "Return only the query name and parameters. Be concise.",
+          },
           { role: "user", content: prompt },
-          { role: "assistant", content: "{" }
+          { role: "assistant", content: "{" },
         ],
       });
 
-      const response = options.useTimeout && options.timeoutPromise
-        ? await Promise.race([responsePromise, options.timeoutPromise])
-        : await responsePromise;
-        
+      const response =
+        options.useTimeout && options.timeoutPromise
+          ? await Promise.race([responsePromise, options.timeoutPromise])
+          : await responsePromise;
+
       return response.choices[0]?.message?.content?.trim() || "";
     } else if (this.aiProvider === "deepseek" && this.openai) {
       // DeepSeek uses OpenAI compatible API
@@ -325,16 +365,22 @@ export class A11yAILocator {
         max_tokens: 1024,
         response_format: options.format ? { type: "json_object" } : undefined,
         messages: [
-          { role: "system", content: options.systemPrompt || "Return only the query name and parameters. Be concise." },
+          {
+            role: "system",
+            content:
+              options.systemPrompt ||
+              "Return only the query name and parameters. Be concise.",
+          },
           { role: "user", content: prompt },
-          { role: "assistant", content: "{" }
+          { role: "assistant", content: "{" },
         ],
       });
 
-      const response = options.useTimeout && options.timeoutPromise
-        ? await Promise.race([responsePromise, options.timeoutPromise])
-        : await responsePromise;
-        
+      const response =
+        options.useTimeout && options.timeoutPromise
+          ? await Promise.race([responsePromise, options.timeoutPromise])
+          : await responsePromise;
+
       return response.choices[0]?.message?.content?.trim() || "";
     } else if (this.aiProvider === "gemini" && this.googleAI) {
       const genAI = this.googleAI;
@@ -361,33 +407,36 @@ export class A11yAILocator {
       });
 
       const responsePromise = model.generateContent([
-        options.systemPrompt || "Return only the query name and parameters. Be concise.",
+        options.systemPrompt ||
+          "Return only the query name and parameters. Be concise.",
         prompt,
-        "{"
+        "{",
       ]);
 
-      const response = options.useTimeout && options.timeoutPromise
-        ? await Promise.race([responsePromise, options.timeoutPromise])
-        : await responsePromise;
-        
+      const response =
+        options.useTimeout && options.timeoutPromise
+          ? await Promise.race([responsePromise, options.timeoutPromise])
+          : await responsePromise;
+
       return response.response.text().trim();
     } else if (this.ollama) {
       const responsePromise = this.ollama.chat({
         model: this.model,
         format: options.format,
         options: {
-          num_ctx: 8192
+          num_ctx: 8192,
         },
         messages: [
           { role: "user", content: prompt },
-          { role: "assistant", content: "{" }
+          { role: "assistant", content: "{" },
         ],
       });
 
-      const response = options.useTimeout && options.timeoutPromise
-        ? await Promise.race([responsePromise, options.timeoutPromise])
-        : await responsePromise;
-        
+      const response =
+        options.useTimeout && options.timeoutPromise
+          ? await Promise.race([responsePromise, options.timeoutPromise])
+          : await responsePromise;
+
       return response.message.content.trim();
     } else {
       throw new Error("No AI provider configured");
@@ -400,14 +449,14 @@ export class A11yAILocator {
    * @param params The parameters for the query
    * @returns Playwright Locator
    */
-  private executeTestingLibraryQuery(
-    query: LocatorQuery
-  ): Locator {
+  private executeTestingLibraryQuery(query: LocatorQuery): Locator {
     switch (query.query.toLowerCase()) {
       case "getbyrole":
         // First param is role, second is name (optional)
         if (query.params.length > 1) {
-          return this.page.getByRole(query.params[0] as any, { name: query.params[1] });
+          return this.page.getByRole(query.params[0] as any, {
+            name: query.params[1],
+          });
         }
         return this.page.getByRole(query.params[0] as any);
 
@@ -439,7 +488,13 @@ export function createA11yAILocator(
   testInfo: TestInfo,
   options: {
     model?: string;
-    provider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek" | "bedrock";
+    provider:
+      | "ollama"
+      | "anthropic"
+      | "openai"
+      | "gemini"
+      | "deepseek"
+      | "bedrock";
     baseUrl?: string;
     snapshotFilePath?: string;
     apiKey?: string;
