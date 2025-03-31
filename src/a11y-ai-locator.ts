@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as cheerio from "cheerio";
 import { SnapshotManager } from "./snapshot-manager";
-import { createLocatorPrompt, createSimpleLocatorPrompt, LocatorQuerySchema } from "./prompt";
+import { createLocatorPrompt, createSimpleLocatorPrompt, LocatorQuery, LocatorQuerySchema } from "./prompt";
 import { extractBodyContent } from "./sanitize-html";
 import zodToJsonSchema from "zod-to-json-schema";
 
@@ -73,8 +73,8 @@ export class A11yAILocator {
     // Check if we have a saved snapshot for this description
     const snapshots = this.snapshotManager.readSnapshots();
     if (snapshots[description]) {
-      const { query, params } = snapshots[description];
-      const locator = this.executeTestingLibraryQuery(query, params);
+      const { queryName, params } = snapshots[description];
+      const locator = this.executeTestingLibraryQuery(queryName, params);
 
       // Verify the locator exists on the page
       const count = await locator.count();
@@ -146,55 +146,15 @@ export class A11yAILocator {
         throw new Error("No AI provider configured");
       }
 
-      // Parse the JSON response
-      let queryName: string;
-      let queryParams: string[];
+      const locatorQuery = LocatorQuerySchema.parse(JSON.parse(queryInfo));
 
-      try {
-        // First try to extract JSON if it's wrapped in markdown code blocks
-        let jsonString = queryInfo;
-        const jsonRegex = /```(?:json)?\s*({[\s\S]*?})\s*```/;
-        const match = queryInfo.match(jsonRegex);
-
-        if (match && match[1]) {
-          jsonString = match[1];
-        }
-
-        const jsonResponse = JSON.parse(jsonString);
-        queryName = jsonResponse.query;
-        queryParams = jsonResponse.params || [];
-      } catch (error) {
-        console.warn(
-          `Failed to parse JSON response: ${error}. Falling back to text parsing.`
-        );
-
-        // Fallback to the old text parsing method
-        const [name, ...params] = queryInfo
-          .split(":")
-          .map((part) => part.trim());
-
-        queryName = name;
-
-        // Handle parameters more carefully to avoid splitting text that contains commas
-        if (queryName.toLowerCase() === "getbytext") {
-          queryParams = [params.join(":").trim()];
-        } else {
-          // For other query types, we can split by comma as they typically have separate parameters
-          queryParams = params
-            .join(":")
-            .split(",")
-            .map((p) => p.trim());
-        }
-      }
+      
 
       // Save the snapshot for future use
-      this.snapshotManager.saveSnapshot(description, {
-        query: queryName as any,
-        params: queryParams,
-      });
+      this.snapshotManager.saveSnapshot(description, locatorQuery);
 
       // Execute the appropriate Testing Library query
-      return this.executeTestingLibraryQuery(queryName, queryParams);
+      return this.executeTestingLibraryQuery(locatorQuery);
     } catch (error) {
       console.warn(
         `AI request failed or timed out: ${error}. Trying with simplified HTML...`
@@ -208,10 +168,7 @@ export class A11yAILocator {
         );
 
         // Save the snapshot for future use
-        this.snapshotManager.saveSnapshot(description, { 
-          query: queryName as any, 
-          params 
-        });
+        this.snapshotManager.saveSnapshot(description, { queryName, params });
 
         // Execute the appropriate Testing Library query
         return this.executeTestingLibraryQuery(queryName, params);
@@ -291,7 +248,7 @@ export class A11yAILocator {
 
     // Get the query suggestion from the appropriate AI provider
     let queryInfo: string;
-    console.log(`Prompt size is: ${prompt.length}`);
+    // AI! there is similar code on line 117, consolidate executing the prompt against the aiProvider into a function in this file
     if (this.aiProvider === "anthropic" && this.anthropic) {
       const response = await this.anthropic.messages.create({
         model: this.model,
@@ -375,35 +332,34 @@ export class A11yAILocator {
    * @returns Playwright Locator
    */
   private executeTestingLibraryQuery(
-    queryName: string,
-    params: string[]
+    query: LocatorQuery
   ): Locator {
-    switch (queryName.toLowerCase()) {
+    switch (query.query.toLowerCase()) {
       case "getbyrole":
         // First param is role, second is name (optional)
         if (params.length > 1) {
-          return this.page.getByRole(params[0] as any, { name: params[1] });
+          return this.page.getByRole(query.params[0] as any, { name: query.params[1] });
         }
-        return this.page.getByRole(params[0] as any);
+        return this.page.getByRole(query.params[0] as any);
 
       case "getbytext":
-        return this.page.getByText(params[0], { exact: false });
+        return this.page.getByText(query.params[0], { exact: false });
 
       case "getbylabeltext":
-        return this.page.getByLabel(params[0]);
+        return this.page.getByLabel(query.params[0]);
 
       case "getbyplaceholdertext":
-        return this.page.getByPlaceholder(params[0]);
+        return this.page.getByPlaceholder(query.params[0]);
 
       case "getbytestid":
-        return this.page.getByTestId(params[0]);
+        return this.page.getByTestId(query.params[0]);
 
       case "getbyalttext":
-        return this.page.getByAltText(params[0]);
+        return this.page.getByAltText(query.params[0]);
 
       default:
         // Fallback to a basic text search if the query type is not recognized
-        return this.page.getByText(params[0]);
+        return this.page.getByText(query.params[0]);
     }
   }
 }
