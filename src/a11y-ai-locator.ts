@@ -39,6 +39,7 @@ export class A11yAILocator {
     this.timeout = options.timeout || 60000; // Default 60 seconds
     this.aiProvider = options.provider;
 
+    // AI! add beckrock as another provider, the client-beckrock sdk is installed, the model must be specified
     // Set default models based on provider if not specified
     if (!options.model) {
       switch (options.provider) {
