@@ -225,7 +225,6 @@ export class A11yAILocator {
       format?: string;
     } = {}
   ): Promise<string> {
-    // AI! I want to support OpenAI, DeepSeek and Gemini in addition to anthropic and ollama and they should use the same parameters as much as possible
     if (this.aiProvider === "anthropic" && this.anthropic) {
       const responsePromise = this.anthropic.messages.create({
         model: this.model,
@@ -249,6 +248,76 @@ export class A11yAILocator {
       } else {
         throw new Error("No text content found in Anthropic response");
       }
+    } else if (this.aiProvider === "openai" && this.openai) {
+      const responsePromise = this.openai.chat.completions.create({
+        model: this.model,
+        max_tokens: 1024,
+        response_format: options.format ? { type: "json_object" } : undefined,
+        messages: [
+          { role: "system", content: options.systemPrompt || "Return only the query name and parameters. Be concise." },
+          { role: "user", content: prompt },
+          { role: "assistant", content: "{" }
+        ],
+      });
+
+      const response = options.useTimeout && options.timeoutPromise
+        ? await Promise.race([responsePromise, options.timeoutPromise])
+        : await responsePromise;
+        
+      return response.choices[0]?.message?.content?.trim() || "";
+    } else if (this.aiProvider === "deepseek" && this.openai) {
+      // DeepSeek uses OpenAI compatible API
+      const responsePromise = this.openai.chat.completions.create({
+        model: this.model,
+        max_tokens: 1024,
+        response_format: options.format ? { type: "json_object" } : undefined,
+        messages: [
+          { role: "system", content: options.systemPrompt || "Return only the query name and parameters. Be concise." },
+          { role: "user", content: prompt },
+          { role: "assistant", content: "{" }
+        ],
+      });
+
+      const response = options.useTimeout && options.timeoutPromise
+        ? await Promise.race([responsePromise, options.timeoutPromise])
+        : await responsePromise;
+        
+      return response.choices[0]?.message?.content?.trim() || "";
+    } else if (this.aiProvider === "gemini" && this.googleAI) {
+      const genAI = this.googleAI;
+      const model = genAI.getGenerativeModel({
+        model: this.model,
+        safetySettings: [
+          {
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+        ],
+      });
+
+      const responsePromise = model.generateContent([
+        options.systemPrompt || "Return only the query name and parameters. Be concise.",
+        prompt,
+        "{"
+      ]);
+
+      const response = options.useTimeout && options.timeoutPromise
+        ? await Promise.race([responsePromise, options.timeoutPromise])
+        : await responsePromise;
+        
+      return response.response.text().trim();
     } else if (this.ollama) {
       const responsePromise = this.ollama.chat({
         model: this.model,
