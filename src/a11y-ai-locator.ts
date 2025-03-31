@@ -49,7 +49,7 @@ export class A11yAILocator {
           this.model = "gpt-4o";
           break;
         case "gemini":
-          this.model = "gemini-1.5-pro";
+          this.model = "gemini-2.5-pro";
           break;
         case "deepseek":
           this.model = "DeepSeek-V3";
@@ -63,6 +63,7 @@ export class A11yAILocator {
       this.model = options.model;
     }
 
+    // AI! always check that API key is available otherwise throw an error
     // Initialize the appropriate client based on the provider
     switch (this.aiProvider) {
       case "anthropic":
