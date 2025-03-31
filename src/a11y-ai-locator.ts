@@ -27,7 +27,8 @@ export class A11yAILocator {
     page: Page,
     testInfo: TestInfo,
     options: {
-      model: string; // Required parameter
+      model?: string;
+      provider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek";
       baseUrl?: string;
       snapshotFilePath?: string;
       apiKey?: string;
@@ -36,59 +37,67 @@ export class A11yAILocator {
   ) {
     this.page = page;
     this.timeout = options.timeout || 60000; // Default 60 seconds
+    this.aiProvider = options.provider;
 
-    // Model is required
+    // Set default models based on provider if not specified
     if (!options.model) {
-      throw new Error("Model parameter is required");
-    }
-    
-    this.model = options.model;
-
-    // AI! The model should not determine the provider, the provider must be passed in, anthropic should default claude 3.7, openai to gpt-4o, google to gemini-2.5-pro, deepseek to DeepSeek-V3
-    // Determine which AI provider to use based on the model
-    if (this.model.startsWith("claude-")) {
-      this.aiProvider = "anthropic";
-      this.anthropic = new Anthropic({
-        apiKey: options.apiKey || process.env.ANTHROPIC_API_KEY || "",
-      });
-    } else if (this.model.startsWith("gpt-")) {
-      this.aiProvider = "openai";
-      this.openai = new OpenAI({
-        apiKey: options.apiKey || process.env.OPENAI_API_KEY || "",
-        baseURL: options.baseUrl, // Allow overriding for Azure OpenAI etc.
-      });
-    } else if (this.model.startsWith("gemini-")) {
-      this.aiProvider = "gemini";
-      const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("Gemini API key is required. Provide it via options.apiKey or GEMINI_API_KEY environment variable.");
+      switch (options.provider) {
+        case "anthropic":
+          this.model = "claude-3-haiku-20240307";
+          break;
+        case "openai":
+          this.model = "gpt-4o";
+          break;
+        case "gemini":
+          this.model = "gemini-1.5-pro";
+          break;
+        case "deepseek":
+          this.model = "DeepSeek-V3";
+          break;
+        case "ollama":
+          throw new Error("Model must be specified for Ollama provider");
+        default:
+          throw new Error(`Unknown provider: ${options.provider}`);
       }
-      this.googleAI = new GoogleGenerativeAI(apiKey);
-    } else if (this.model.startsWith("deepseek-")) {
-      this.aiProvider = "deepseek";
-      // DeepSeek uses OpenAI compatible API
-      this.openai = new OpenAI({
-        apiKey: options.apiKey || process.env.DEEPSEEK_API_KEY || "",
-        baseURL: options.baseUrl || "https://api.deepseek.com/v1", // Default DeepSeek API endpoint
-      });
-    } else if (this.model.startsWith("bedrock:")) {
-      // Handle Bedrock models (format: "bedrock:model-id")
-      const modelId = this.model.split(":")[1];
-      if (!modelId) {
-        throw new Error("Bedrock model ID must be specified in format 'bedrock:model-id'");
-      }
-      
-      this.aiProvider = "openai"; // Using OpenAI client with Bedrock endpoint
-      this.openai = new OpenAI({
-        apiKey: options.apiKey || process.env.AWS_ACCESS_KEY_ID || "",
-        baseURL: options.baseUrl || "https://bedrock-runtime.us-east-1.amazonaws.com/model/" + modelId,
-      });
     } else {
-      // Ollama models must be explicitly specified
-      this.aiProvider = "ollama";
-      this.ollama = new Ollama({
-        host: options.baseUrl || "http://localhost:11434", // Ollama host
-      });
+      this.model = options.model;
+    }
+
+    // Initialize the appropriate client based on the provider
+    switch (this.aiProvider) {
+      case "anthropic":
+        this.anthropic = new Anthropic({
+          apiKey: options.apiKey || process.env.ANTHROPIC_API_KEY || "",
+        });
+        break;
+      case "openai":
+        this.openai = new OpenAI({
+          apiKey: options.apiKey || process.env.OPENAI_API_KEY || "",
+          baseURL: options.baseUrl, // Allow overriding for Azure OpenAI etc.
+        });
+        break;
+      case "gemini":
+        const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+          throw new Error("Gemini API key is required. Provide it via options.apiKey or GEMINI_API_KEY environment variable.");
+        }
+        this.googleAI = new GoogleGenerativeAI(apiKey);
+        break;
+      case "deepseek":
+        // DeepSeek uses OpenAI compatible API
+        this.openai = new OpenAI({
+          apiKey: options.apiKey || process.env.DEEPSEEK_API_KEY || "",
+          baseURL: options.baseUrl || "https://api.deepseek.com/v1", // Default DeepSeek API endpoint
+        });
+        break;
+      case "ollama":
+        if (!options.model) {
+          throw new Error("Model must be specified for Ollama provider");
+        }
+        this.ollama = new Ollama({
+          host: options.baseUrl || "http://localhost:11434", // Ollama host
+        });
+        break;
     }
 
 
@@ -399,7 +408,8 @@ export function createA11yAILocator(
   page: Page,
   testInfo: TestInfo,
   options: {
-    model: string;
+    model?: string;
+    provider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek";
     baseUrl?: string;
     snapshotFilePath?: string;
     apiKey?: string;
