@@ -71,6 +71,7 @@ export class SnapshotManager {
    */
   saveSnapshot(
     description: string,
+    // AI! the type of query info needs to be the same as zod schema LocatorQuerySchema
     queryInfo: { queryName: string; params: string[] }
   ): void {
     if (!this.snapshotFilePath) return;

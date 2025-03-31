@@ -5,8 +5,9 @@ import * as fs from "fs";
 import * as path from "path";
 import * as cheerio from "cheerio";
 import { SnapshotManager } from "./snapshot-manager";
-import { createLocatorPrompt, createSimpleLocatorPrompt } from "./prompt";
+import { createLocatorPrompt, createSimpleLocatorPrompt, LocatorQuerySchema } from "./prompt";
 import { extractBodyContent } from "./sanitize-html";
+import zodToJsonSchema from "zod-to-json-schema";
 
 export class A11yAILocator {
   private page: Page;
@@ -113,17 +114,17 @@ export class A11yAILocator {
 
       // Make the AI request with timeout
       let queryInfo: string;
-      console.log(`Prompt size is: ${prompt.length}`);
       if (this.aiProvider === "anthropic" && this.anthropic) {
         const responsePromise = this.anthropic.messages.create({
           model: this.model,
           max_tokens: 1024,
           system:
             "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: prompt }, {role: "assistant", content: "{"}],
         });
 
         const response = await Promise.race([responsePromise, timeoutPromise]);
+        response.content
         const textContent = response.content.find(
           (item) => item.type === "text"
         );
@@ -135,7 +136,8 @@ export class A11yAILocator {
       } else if (this.ollama) {
         const responsePromise = this.ollama.chat({
           model: this.model,
-          messages: [{ role: "user", content: prompt }],
+          format: zodToJsonSchema(LocatorQuerySchema) as string,
+          messages: [{ role: "user", content: prompt }, {role: "assistant", content: "{"}],
         });
 
         const response = await Promise.race([responsePromise, timeoutPromise]);
