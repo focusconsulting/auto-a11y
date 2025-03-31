@@ -1,6 +1,8 @@
 import { Page, Locator, TestInfo } from "@playwright/test";
 import { Ollama } from "ollama";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import * as fs from "fs";
 import * as path from "path";
 import * as cheerio from "cheerio";
@@ -13,8 +15,10 @@ export class A11yAILocator {
   private page: Page;
   private ollama: Ollama | null = null;
   private anthropic: Anthropic | null = null;
+  private openai: OpenAI | null = null;
+  private googleAI: GoogleGenerativeAI | null = null;
   private model: string;
-  private aiProvider: "ollama" | "anthropic";
+  private aiProvider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek";
   private snapshotFilePath: string | null = null;
   private cachedBodyContent: string | null = null;
   private lastHtml: string | null = null;
@@ -33,25 +37,46 @@ export class A11yAILocator {
     } = {}
   ) {
     this.page = page;
-    this.timeout = options.timeout || 60000; // Default 30 seconds
+    this.timeout = options.timeout || 60000; // Default 60 seconds
 
-    // Determine which AI provider to use based on the model
-    if (
-      options.model === "claude-3-7" ||
-      options.model?.startsWith("claude-")
-    ) {
+    // Determine which AI provider to use based on the model and options
+    this.model = options.model || "deep-seek-auto-a11y"; // Default model
+
+    if (this.model.startsWith("claude-")) {
       this.aiProvider = "anthropic";
-      this.model = options.model || "claude-3-7";
       this.anthropic = new Anthropic({
         apiKey: options.apiKey || process.env.ANTHROPIC_API_KEY || "",
       });
-    } else {
-      this.aiProvider = "ollama";
-      this.model = options.model || "deep-seek-auto-a11y";
-      this.ollama = new Ollama({
-        host: options.baseUrl || "http://localhost:11434",
+    } else if (this.model.startsWith("gpt-")) {
+      this.aiProvider = "openai";
+      this.openai = new OpenAI({
+        apiKey: options.apiKey || process.env.OPENAI_API_KEY || "",
+        baseURL: options.baseUrl, // Allow overriding for Azure OpenAI etc.
       });
+    } else if (this.model.startsWith("gemini-")) {
+      this.aiProvider = "gemini";
+      const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Gemini API key is required. Provide it via options.apiKey or GEMINI_API_KEY environment variable.");
+      }
+      this.googleAI = new GoogleGenerativeAI(apiKey);
+    } else if (this.model.startsWith("deepseek-")) {
+       this.aiProvider = "deepseek";
+       // DeepSeek uses OpenAI compatible API
+       this.openai = new OpenAI({
+         apiKey: options.apiKey || process.env.DEEPSEEK_API_KEY || "",
+         baseURL: options.baseUrl || "https://api.deepseek.com/v1", // Default DeepSeek API endpoint
+       });
+    } else {
+      // Default to Ollama if no specific provider prefix matches or if an Ollama model name is given
+      this.aiProvider = "ollama";
+      this.ollama = new Ollama({
+        host: options.baseUrl || "http://localhost:11434", // Ollama host
+      });
+      // If a model name was provided but didn't match others, assume it's for Ollama
+      this.model = options.model || "deep-seek-auto-a11y"; // Keep or set Ollama model
     }
+
 
     // Default to test name if available, otherwise use provided path or null
     if (options.snapshotFilePath) {
