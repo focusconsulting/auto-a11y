@@ -16,7 +16,7 @@ export class A11yAILocator {
   private openai: OpenAI | null = null;
   private googleAI: GoogleGenerativeAI | null = null;
   private model: string;
-  private aiProvider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek";
+  private aiProvider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek" | "bedrock";
   private snapshotFilePath: string | null = null;
   private cachedBodyContent: string | null = null;
   private lastHtml: string | null = null;
@@ -28,7 +28,7 @@ export class A11yAILocator {
     testInfo: TestInfo,
     options: {
       model?: string;
-      provider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek";
+      provider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek" | "bedrock";
       baseUrl?: string;
       snapshotFilePath?: string;
       apiKey?: string;
@@ -39,7 +39,6 @@ export class A11yAILocator {
     this.timeout = options.timeout || 60000; // Default 60 seconds
     this.aiProvider = options.provider;
 
-    // AI! add beckrock as another provider, the client-beckrock sdk is installed, the model must be specified
     // Set default models based on provider if not specified
     if (!options.model) {
       switch (options.provider) {
@@ -55,6 +54,8 @@ export class A11yAILocator {
         case "deepseek":
           this.model = "DeepSeek-V3";
           break;
+        case "bedrock":
+          throw new Error("Model must be specified for Bedrock provider");
         case "ollama":
           throw new Error("Model must be specified for Ollama provider");
         default:
@@ -101,6 +102,22 @@ export class A11yAILocator {
         this.openai = new OpenAI({
           apiKey: deepseekApiKey,
           baseURL: options.baseUrl || "https://api.deepseek.com/v1", // Default DeepSeek API endpoint
+        });
+        break;
+      case "bedrock":
+        if (!options.model) {
+          throw new Error("Model must be specified for Bedrock provider");
+        }
+        const bedrockApiKey = options.apiKey || process.env.AWS_ACCESS_KEY_ID;
+        const bedrockSecretKey = process.env.AWS_SECRET_ACCESS_KEY;
+        if (!bedrockApiKey || !bedrockSecretKey) {
+          throw new Error("AWS credentials are required for Bedrock. Provide AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.");
+        }
+        
+        // Bedrock uses OpenAI compatible client
+        this.openai = new OpenAI({
+          apiKey: bedrockApiKey,
+          baseURL: options.baseUrl || `https://bedrock-runtime.us-east-1.amazonaws.com/model/${this.model}`,
         });
         break;
       case "ollama":
@@ -422,7 +439,7 @@ export function createA11yAILocator(
   testInfo: TestInfo,
   options: {
     model?: string;
-    provider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek";
+    provider: "ollama" | "anthropic" | "openai" | "gemini" | "deepseek" | "bedrock";
     baseUrl?: string;
     snapshotFilePath?: string;
     apiKey?: string;
