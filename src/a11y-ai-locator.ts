@@ -113,38 +113,12 @@ export class A11yAILocator {
       });
 
       // Make the AI request with timeout
-      let queryInfo: string;
-      if (this.aiProvider === "anthropic" && this.anthropic) {
-        const responsePromise = this.anthropic.messages.create({
-          model: this.model,
-          max_tokens: 1024,
-          system:
-            "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
-          messages: [{ role: "user", content: prompt }, {role: "assistant", content: "{"}],
-        });
-
-        const response = await Promise.race([responsePromise, timeoutPromise]);
-        response.content
-        const textContent = response.content.find(
-          (item) => item.type === "text"
-        );
-        if (textContent && "text" in textContent) {
-          queryInfo = textContent.text.trim();
-        } else {
-          throw new Error("No text content found in Anthropic response");
-        }
-      } else if (this.ollama) {
-        const responsePromise = this.ollama.chat({
-          model: this.model,
-          format: zodToJsonSchema(LocatorQuerySchema) as string,
-          messages: [{ role: "user", content: prompt }, {role: "assistant", content: "{"}],
-        });
-
-        const response = await Promise.race([responsePromise, timeoutPromise]);
-        queryInfo = response.message.content.trim();
-      } else {
-        throw new Error("No AI provider configured");
-      }
+      const queryInfo = await this.executePrompt(prompt, {
+        useTimeout: true,
+        timeoutPromise,
+        systemPrompt: "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
+        format: zodToJsonSchema(LocatorQuerySchema) as string
+      });
 
       const locatorQuery = LocatorQuerySchema.parse(JSON.parse(queryInfo));
 
@@ -247,38 +221,9 @@ export class A11yAILocator {
     const prompt = createSimpleLocatorPrompt(description, simplifiedHTML);
 
     // Get the query suggestion from the appropriate AI provider
-    let queryInfo: string;
-    // AI! there is similar code on line 117, consolidate executing the prompt against the aiProvider into a function in this file
-    if (this.aiProvider === "anthropic" && this.anthropic) {
-      const response = await this.anthropic.messages.create({
-        model: this.model,
-        max_tokens: 1024,
-        system: "Return only the query name and parameters. Be concise.",
-        messages: [{ role: "user", content: prompt }],
-      });
-      // Handle different content types in the response
-      if (response.content[0].type === "text") {
-        queryInfo = response.content[0].text.trim();
-      } else {
-        // If first content item isn't text, search for the first text item
-        const textContent = response.content.find(
-          (item) => item.type === "text"
-        );
-        if (textContent && "text" in textContent) {
-          queryInfo = textContent.text.trim();
-        } else {
-          throw new Error("No text content found in Anthropic response");
-        }
-      }
-    } else if (this.ollama) {
-      const response = await this.ollama.chat({
-        model: this.model,
-        messages: [{ role: "user", content: prompt }],
-      });
-      queryInfo = response.message.content.trim();
-    } else {
-      throw new Error("No AI provider configured");
-    }
+    const queryInfo = await this.executePrompt(prompt, {
+      systemPrompt: "Return only the query name and parameters. Be concise."
+    });
 
     // Parse the JSON response
     try {
@@ -323,6 +268,64 @@ export class A11yAILocator {
     }
 
     // return { queryName, params: queryParams };
+  }
+
+  /**
+   * Executes a prompt against the configured AI provider
+   * @param prompt The prompt to send to the AI
+   * @param options Additional options for the AI request
+   * @returns The AI response as a string
+   */
+  private async executePrompt(
+    prompt: string, 
+    options: {
+      useTimeout?: boolean;
+      timeoutPromise?: Promise<never>;
+      systemPrompt?: string;
+      format?: string;
+    } = {}
+  ): Promise<string> {
+    if (this.aiProvider === "anthropic" && this.anthropic) {
+      const responsePromise = this.anthropic.messages.create({
+        model: this.model,
+        max_tokens: 1024,
+        system: options.systemPrompt || "Return only the query name and parameters. Be concise.",
+        messages: [
+          { role: "user", content: prompt }, 
+          { role: "assistant", content: "{" }
+        ],
+      });
+
+      const response = options.useTimeout && options.timeoutPromise
+        ? await Promise.race([responsePromise, options.timeoutPromise])
+        : await responsePromise;
+
+      const textContent = response.content.find(
+        (item) => item.type === "text"
+      );
+      if (textContent && "text" in textContent) {
+        return textContent.text.trim();
+      } else {
+        throw new Error("No text content found in Anthropic response");
+      }
+    } else if (this.ollama) {
+      const responsePromise = this.ollama.chat({
+        model: this.model,
+        format: options.format,
+        messages: [
+          { role: "user", content: prompt },
+          { role: "assistant", content: "{" }
+        ],
+      });
+
+      const response = options.useTimeout && options.timeoutPromise
+        ? await Promise.race([responsePromise, options.timeoutPromise])
+        : await responsePromise;
+        
+      return response.message.content.trim();
+    } else {
+      throw new Error("No AI provider configured");
+    }
   }
 
   /**
