@@ -37,6 +37,7 @@ export class A11yAILocator {
   private lastHtml: string | null = null;
   private timeout: number;
   private snapshotManager: SnapshotManager;
+  private testInstance: any;
 
   constructor(
     page: Page,
@@ -54,8 +55,10 @@ export class A11yAILocator {
       snapshotFilePath?: string;
       apiKey?: string;
       timeout?: number;
+      testInstance?: any;
     }
   ) {
+    this.testInstance = options.testInstance || null;
     this.page = page;
     this.timeout = options.timeout || 60000; // Default 60 seconds
     this.aiProvider = options.provider;
@@ -221,9 +224,8 @@ export class A11yAILocator {
           this.timeout
         );
       });
-      const locatorQuery =
-      // AI! extract test so its a parameter that is passed in
-        await test.step(`auto-a11y: locating: ${description}`, async () => {
+      const locatorQuery = this.testInstance ? 
+        await this.testInstance.step(`auto-a11y: locating: ${description}`, async () => {
           // Make the AI request with timeout
           const queryInfo = await this.executePrompt(prompt, {
             useTimeout: true,
@@ -234,7 +236,15 @@ export class A11yAILocator {
           });
 
           return LocatorQuerySchema.parse(JSON.parse(queryInfo));
-        });
+        }) :
+        // If no test instance is provided, execute without the step wrapper
+        LocatorQuerySchema.parse(JSON.parse(await this.executePrompt(prompt, {
+          useTimeout: true,
+          timeoutPromise,
+          systemPrompt:
+            "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
+          format: zodToJsonSchema(LocatorQuerySchema) as string,
+        })));
 
       // Save the snapshot for future use
       this.snapshotManager.saveSnapshot(description, locatorQuery);
@@ -499,6 +509,7 @@ export function createA11yAILocator(
     snapshotFilePath?: string;
     apiKey?: string;
     timeout?: number;
+    testInstance?: any;
   }
 ): A11yAILocator {
   return new A11yAILocator(page, testInfo, options);
