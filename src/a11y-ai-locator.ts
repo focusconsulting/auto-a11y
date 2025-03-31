@@ -44,6 +44,7 @@ export class A11yAILocator {
     
     this.model = options.model;
 
+    // AI! The model should not determine the provider, the provider must be passed in, anthropic should default claude 3.7, openai to gpt-4o, google to gemini-2.5-pro, deepseek to DeepSeek-V3
     // Determine which AI provider to use based on the model
     if (this.model.startsWith("claude-")) {
       this.aiProvider = "anthropic";
