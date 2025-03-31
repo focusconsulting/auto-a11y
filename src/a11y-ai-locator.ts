@@ -73,8 +73,8 @@ export class A11yAILocator {
     // Check if we have a saved snapshot for this description
     const snapshots = this.snapshotManager.readSnapshots();
     if (snapshots[description]) {
-      const { queryName, params } = snapshots[description];
-      const locator = this.executeTestingLibraryQuery(queryName, params);
+      const { query, params } = snapshots[description];
+      const locator = this.executeTestingLibraryQuery(query, params);
 
       // Verify the locator exists on the page
       const count = await locator.count();
@@ -189,7 +189,7 @@ export class A11yAILocator {
 
       // Save the snapshot for future use
       this.snapshotManager.saveSnapshot(description, {
-        queryName,
+        query: queryName as any,
         params: queryParams,
       });
 
@@ -208,7 +208,10 @@ export class A11yAILocator {
         );
 
         // Save the snapshot for future use
-        this.snapshotManager.saveSnapshot(description, { queryName, params });
+        this.snapshotManager.saveSnapshot(description, { 
+          query: queryName as any, 
+          params 
+        });
 
         // Execute the appropriate Testing Library query
         return this.executeTestingLibraryQuery(queryName, params);

@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { TestInfo } from "@playwright/test";
+import { LocatorQuery } from "./locator-schema";
 
 /**
  * Class to manage saving and loading locator snapshots
@@ -46,10 +47,7 @@ export class SnapshotManager {
    * Reads locator snapshots from the snapshot file
    * @returns Object containing saved locators or empty object if file doesn't exist
    */
-  readSnapshots(): Record<
-    string,
-    { queryName: string; params: string[] }
-  > {
+  readSnapshots(): Record<string, LocatorQuery> {
     if (!this.snapshotFilePath) return {};
 
     try {
@@ -71,8 +69,7 @@ export class SnapshotManager {
    */
   saveSnapshot(
     description: string,
-    // AI! the type of query info needs to be the same as zod schema LocatorQuerySchema
-    queryInfo: { queryName: string; params: string[] }
+    queryInfo: LocatorQuery
   ): void {
     if (!this.snapshotFilePath) return;
 
