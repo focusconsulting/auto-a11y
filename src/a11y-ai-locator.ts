@@ -73,8 +73,8 @@ export class A11yAILocator {
     // Check if we have a saved snapshot for this description
     const snapshots = this.snapshotManager.readSnapshots();
     if (snapshots[description]) {
-      const { queryName, params } = snapshots[description];
-      const locator = this.executeTestingLibraryQuery(queryName, params);
+      const locatorQuery = snapshots[description];
+      const locator = this.executeTestingLibraryQuery(locatorQuery);
 
       // Verify the locator exists on the page
       const count = await locator.count();
@@ -136,16 +136,16 @@ export class A11yAILocator {
 
       // Fall back to simplified HTML approach
       try {
-        const { queryName, params } = await this.locateWithSimplifiedHTML(
+        const locatorQuery = await this.locateWithSimplifiedHTML(
           description,
           html
         );
 
         // Save the snapshot for future use
-        this.snapshotManager.saveSnapshot(description, { queryName, params });
+        this.snapshotManager.saveSnapshot(description, locatorQuery);
 
         // Execute the appropriate Testing Library query
-        return this.executeTestingLibraryQuery(queryName, params);
+        return this.executeTestingLibraryQuery(locatorQuery);
       } catch (fallbackError) {
         console.error(`Simplified HTML approach also failed: ${fallbackError}`);
 
@@ -168,7 +168,7 @@ export class A11yAILocator {
   private async locateWithSimplifiedHTML(
     description: string,
     html: string
-  ): Promise<{ queryName: string; params: string[] }> {
+  ): Promise<LocatorQuery> {
     // Create a much more simplified version of the HTML
     const simplifiedHTML = simplifyHtml(html);
 
@@ -180,48 +180,9 @@ export class A11yAILocator {
       systemPrompt: "Return only the query name and parameters. Be concise."
     });
 
-    // Parse the JSON response
-    try {
-      // First try to extract JSON if it's wrapped in markdown code blocks
-      let jsonString = queryInfo;
-      const jsonRegex = /```(?:json)?\s*({[\s\S]*?})\s*```/;
-      const match = queryInfo.match(jsonRegex);
+    const locatorQuery = LocatorQuerySchema.parse(JSON.parse(queryInfo));
 
-      if (match && match[1]) {
-        jsonString = match[1];
-      }
-
-      const jsonResponse = JSON.parse(jsonString);
-      const queryName = jsonResponse.query;
-      const queryParams = jsonResponse.params || [];
-      return { queryName, params: queryParams };
-    } catch (error) {
-      console.warn(
-        `Failed to parse JSON response: ${error}. Falling back to text parsing.`
-      );
-
-      // Fallback to the old text parsing method
-      const [queryName, ...params] = queryInfo
-        .split(":")
-        .map((part) => part.trim());
-
-      // Handle parameters more carefully to avoid splitting text that contains commas
-      let queryParams: string[] = [];
-
-      // For getByText, we want to preserve the entire text including any commas
-      if (queryName.toLowerCase() === "getbytext") {
-        queryParams = [params.join(":").trim()];
-      } else {
-        // For other query types, we can split by comma as they typically have separate parameters
-        queryParams = params
-          .join(":")
-          .split(",")
-          .map((p) => p.trim());
-      }
-
-      return { queryName, params: queryParams };
-    }
-
+    return locatorQuery;
   }
 
   /**
@@ -239,6 +200,7 @@ export class A11yAILocator {
       format?: string;
     } = {}
   ): Promise<string> {
+    // AI! I want to support OpenAI, DeepSeek and Gemini in addition to anthropic and ollama and they should use the same parameters as much as possible
     if (this.aiProvider === "anthropic" && this.anthropic) {
       const responsePromise = this.anthropic.messages.create({
         model: this.model,
@@ -266,6 +228,9 @@ export class A11yAILocator {
       const responsePromise = this.ollama.chat({
         model: this.model,
         format: options.format,
+        options: {
+          num_ctx: 8192
+        },
         messages: [
           { role: "user", content: prompt },
           { role: "assistant", content: "{" }
@@ -294,7 +259,7 @@ export class A11yAILocator {
     switch (query.query.toLowerCase()) {
       case "getbyrole":
         // First param is role, second is name (optional)
-        if (params.length > 1) {
+        if (query.params.length > 1) {
           return this.page.getByRole(query.params[0] as any, { name: query.params[1] });
         }
         return this.page.getByRole(query.params[0] as any);
