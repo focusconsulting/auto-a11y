@@ -27,20 +27,24 @@ export class A11yAILocator {
     page: Page,
     testInfo: TestInfo,
     options: {
-      model?: string;
+      model: string; // Required parameter
       baseUrl?: string;
       snapshotFilePath?: string;
       apiKey?: string;
       timeout?: number;
-    } = {}
+    }
   ) {
-    // AI! there should be no default model, it must be passed, the providers are anthropic:claude 3-7, openai: gpt-4o , gemini: 2.5-pro, deepseek: v2, bedrock: required to be specified and ollama: required to be specified
     this.page = page;
     this.timeout = options.timeout || 60000; // Default 60 seconds
 
-    // Determine which AI provider to use based on the model and options
-    this.model = options.model || "deepseek-coder-v2"; // Default model
+    // Model is required
+    if (!options.model) {
+      throw new Error("Model parameter is required");
+    }
+    
+    this.model = options.model;
 
+    // Determine which AI provider to use based on the model
     if (this.model.startsWith("claude-")) {
       this.aiProvider = "anthropic";
       this.anthropic = new Anthropic({
@@ -60,20 +64,30 @@ export class A11yAILocator {
       }
       this.googleAI = new GoogleGenerativeAI(apiKey);
     } else if (this.model.startsWith("deepseek-")) {
-       this.aiProvider = "deepseek";
-       // DeepSeek uses OpenAI compatible API
-       this.openai = new OpenAI({
-         apiKey: options.apiKey || process.env.DEEPSEEK_API_KEY || "",
-         baseURL: options.baseUrl || "https://api.deepseek.com/v1", // Default DeepSeek API endpoint
-       });
+      this.aiProvider = "deepseek";
+      // DeepSeek uses OpenAI compatible API
+      this.openai = new OpenAI({
+        apiKey: options.apiKey || process.env.DEEPSEEK_API_KEY || "",
+        baseURL: options.baseUrl || "https://api.deepseek.com/v1", // Default DeepSeek API endpoint
+      });
+    } else if (this.model.startsWith("bedrock:")) {
+      // Handle Bedrock models (format: "bedrock:model-id")
+      const modelId = this.model.split(":")[1];
+      if (!modelId) {
+        throw new Error("Bedrock model ID must be specified in format 'bedrock:model-id'");
+      }
+      
+      this.aiProvider = "openai"; // Using OpenAI client with Bedrock endpoint
+      this.openai = new OpenAI({
+        apiKey: options.apiKey || process.env.AWS_ACCESS_KEY_ID || "",
+        baseURL: options.baseUrl || "https://bedrock-runtime.us-east-1.amazonaws.com/model/" + modelId,
+      });
     } else {
-      // Default to Ollama if no specific provider prefix matches or if an Ollama model name is given
+      // Ollama models must be explicitly specified
       this.aiProvider = "ollama";
       this.ollama = new Ollama({
         host: options.baseUrl || "http://localhost:11434", // Ollama host
       });
-      // If a model name was provided but didn't match others, assume it's for Ollama
-      this.model = options.model || "deep-seek-auto-a11y"; // Keep or set Ollama model
     }
 
 
@@ -383,8 +397,8 @@ export class A11yAILocator {
 export function createA11yAILocator(
   page: Page,
   testInfo: TestInfo,
-  options?: {
-    model?: string;
+  options: {
+    model: string;
     baseUrl?: string;
     snapshotFilePath?: string;
     apiKey?: string;
