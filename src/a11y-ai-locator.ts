@@ -170,6 +170,7 @@ export class A11yAILocator {
     html: string
   ): Promise<{ queryName: string; params: string[] }> {
     // Create a much more simplified version of the HTML
+    // AI! move the code that simplifies the html into a function in sanitize-html.ts
     const $ = cheerio.load(html);
 
     // Keep only essential elements and their text content
@@ -267,7 +268,6 @@ export class A11yAILocator {
       return { queryName, params: queryParams };
     }
 
-    // return { queryName, params: queryParams };
   }
 
   /**
