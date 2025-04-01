@@ -73,7 +73,7 @@ export class A11yAILocator {
           this.model = "gpt-4o";
           break;
         case "gemini":
-          this.model = "gemini-2.5-pro";
+          this.model = "gemini-2.5-pro-exp-03-25";
           break;
         case "deepseek":
           this.model = "DeepSeek-V3";
@@ -189,12 +189,23 @@ export class A11yAILocator {
       const locatorQuery = snapshots[description];
       const locator = this.executeTestingLibraryQuery(locatorQuery);
 
-      // Verify the locator exists on the page
-      const count = await locator.count();
-      if (count > 0) {
-        return locator;
+      const validSnapshotLocator: Locator | null = await this.testInstance.step(
+        `auto-a11y: attempting to use locator snapshot: ${
+          locatorQuery.query
+        }, ${locatorQuery.params.join(",")}`,
+        async () => {
+          // Verify the locator exists on the page
+          const count = await locator.count();
+          if (count > 0) {
+            return locator;
+          } else {
+            return null;
+          }
+        }
+      );
+      if (validSnapshotLocator) {
+        return validSnapshotLocator;
       }
-      // If locator doesn't exist, fall through to generate a new one
     }
 
     // Get the current page HTML
@@ -224,27 +235,35 @@ export class A11yAILocator {
           this.timeout
         );
       });
-      const locatorQuery = this.testInstance ? 
-        await this.testInstance.step(`auto-a11y locating: ${description}`, async () => {
-          // Make the AI request with timeout
-          const queryInfo = await this.executePrompt(prompt, {
-            useTimeout: true,
-            timeoutPromise,
-            systemPrompt:
-              "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
-            format: zodToJsonSchema(LocatorQuerySchema) as string,
-          });
+      const locatorQuery = this.testInstance
+        ? await this.testInstance.step(
+            `auto-a11y locating: ${description}`,
+            async () => {
+              // Make the AI request with timeout
+              const queryInfo = await this.executePrompt(prompt, {
+                useTimeout: true,
+                timeoutPromise,
+                systemPrompt:
+                  "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
+                  // AI! refactor this so zodToJsonSchema occurs inside executePrompt
+                format: zodToJsonSchema(LocatorQuerySchema) as string,
+              });
 
-          return LocatorQuerySchema.parse(JSON.parse(queryInfo));
-        }) :
-        // If no test instance is provided, execute without the step wrapper
-        LocatorQuerySchema.parse(JSON.parse(await this.executePrompt(prompt, {
-          useTimeout: true,
-          timeoutPromise,
-          systemPrompt:
-            "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
-          format: zodToJsonSchema(LocatorQuerySchema) as string,
-        })));
+              return LocatorQuerySchema.parse(JSON.parse(queryInfo));
+            }
+          )
+        : // If no test instance is provided, execute without the step wrapper
+          LocatorQuerySchema.parse(
+            JSON.parse(
+              await this.executePrompt(prompt, {
+                useTimeout: true,
+                timeoutPromise,
+                systemPrompt:
+                  "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
+                format: zodToJsonSchema(LocatorQuerySchema) as string,
+              })
+            )
+          );
 
       // Save the snapshot for future use
       this.snapshotManager.saveSnapshot(description, locatorQuery);
@@ -414,6 +433,16 @@ export class A11yAILocator {
             threshold: HarmBlockThreshold.BLOCK_NONE,
           },
         ],
+      });
+
+      model.generateContent({
+        contents: [
+          { role: "user", parts: [{text: prompt}] },
+          { role: "assistant", parts: [{text:"{"}] },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
       });
 
       const responsePromise = model.generateContent([
