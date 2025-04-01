@@ -2,6 +2,7 @@ import { Page, Locator, TestInfo } from "@playwright/test";
 import { Ollama } from "ollama";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
 import {
   GoogleGenerativeAI,
   HarmCategory,
@@ -17,6 +18,7 @@ import {
 } from "./prompt";
 import { extractBodyContent, simplifyHtml } from "./sanitize-html";
 import zodToJsonSchema from "zod-to-json-schema";
+import { zodToVertexSchema } from "@techery/zod-to-vertex-schema";
 
 export class A11yAILocator {
   private page: Page;
@@ -32,6 +34,7 @@ export class A11yAILocator {
     | "gemini"
     | "deepseek"
     | "bedrock";
+  private useSimplifiedHtml: boolean = false;
   private snapshotFilePath: string | null = null;
   private cachedBodyContent: string | null = null;
   private lastHtml: string | null = null;
@@ -56,8 +59,10 @@ export class A11yAILocator {
       apiKey?: string;
       timeout?: number;
       testInstance?: any;
+      useSimplifiedHtml?: boolean;
     }
   ) {
+    this.useSimplifiedHtml = options.useSimplifiedHtml || false;
     this.testInstance = options.testInstance || null;
     this.page = page;
     this.timeout = options.timeout || 60000; // Default 60 seconds
@@ -245,7 +250,6 @@ export class A11yAILocator {
                 timeoutPromise,
                 systemPrompt:
                   "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
-                schema: LocatorQuerySchema,
               });
 
               return LocatorQuerySchema.parse(JSON.parse(queryInfo));
@@ -259,7 +263,6 @@ export class A11yAILocator {
                 timeoutPromise,
                 systemPrompt:
                   "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
-                format: zodToJsonSchema(LocatorQuerySchema) as string,
               })
             )
           );
@@ -274,24 +277,32 @@ export class A11yAILocator {
         `AI request failed or timed out: ${error}. Trying with simplified HTML...`
       );
 
-      // Fall back to simplified HTML approach
-      try {
-        const locatorQuery = await this.locateWithSimplifiedHTML(
-          description,
-          html
-        );
+      // If simplified HTML is enabled or the main approach failed
+      if (this.useSimplifiedHtml || true) {
+        try {
+          const locatorQuery = await this.locateWithSimplifiedHTML(
+            description,
+            html
+          );
 
-        // Save the snapshot for future use
-        this.snapshotManager.saveSnapshot(description, locatorQuery);
+          // Save the snapshot for future use
+          this.snapshotManager.saveSnapshot(description, locatorQuery);
 
-        // Execute the appropriate Testing Library query
-        return this.executeTestingLibraryQuery(locatorQuery);
-      } catch (fallbackError) {
-        console.error(`Simplified HTML approach also failed: ${fallbackError}`);
+          // Execute the appropriate Testing Library query
+          return this.executeTestingLibraryQuery(locatorQuery);
+        } catch (fallbackError) {
+          console.error(`Simplified HTML approach also failed: ${fallbackError}`);
 
-        // Last resort: try a simple text search
+          // Last resort: try a simple text search
+          console.warn(
+            `Falling back to simple text search for: "${description}"`
+          );
+          return this.page.getByText(description, { exact: false });
+        }
+      } else {
+        // If simplified HTML is disabled, just fall back to simple text search
         console.warn(
-          `Falling back to simple text search for: "${description}"`
+          `Simplified HTML is disabled. Falling back to simple text search for: "${description}"`
         );
         return this.page.getByText(description, { exact: false });
       }
@@ -317,7 +328,6 @@ export class A11yAILocator {
     // Get the query suggestion from the appropriate AI provider
     const queryInfo = await this.executePrompt(prompt, {
       systemPrompt: "Return only the query name and parameters. Be concise.",
-      schema: LocatorQuerySchema,
     });
 
     const locatorQuery = LocatorQuerySchema.parse(JSON.parse(queryInfo));
@@ -337,14 +347,8 @@ export class A11yAILocator {
       useTimeout?: boolean;
       timeoutPromise?: Promise<never>;
       systemPrompt?: string;
-      format?: string;
-      schema?: any;
     } = {}
   ): Promise<string> {
-    // Convert schema to JSON schema if provided
-    if (options.schema && !options.format) {
-      options.format = zodToJsonSchema(options.schema) as string;
-    }
     if (this.aiProvider === "anthropic" && this.anthropic) {
       const responsePromise = this.anthropic.messages.create({
         model: this.model,
@@ -370,11 +374,17 @@ export class A11yAILocator {
         throw new Error("No text content found in Anthropic response");
       }
     } else if (this.aiProvider === "openai" && this.openai) {
-      const responsePromise = this.openai.chat.completions.create({
+      const responsePromise = this.openai.responses.create({
         model: this.model,
-        max_tokens: 1024,
-        response_format: options.format ? { type: "json_object" } : undefined,
-        messages: [
+        text: {
+          format: {
+            type: "json_schema",
+            name: "locatorQuerySchema",
+            schema: zodResponseFormat(LocatorQuerySchema, "locatorQuerySchema")
+              .json_schema.schema as Record<string, unknown>,
+          },
+        },
+        input: [
           {
             role: "system",
             content:
@@ -390,15 +400,23 @@ export class A11yAILocator {
         options.useTimeout && options.timeoutPromise
           ? await Promise.race([responsePromise, options.timeoutPromise])
           : await responsePromise;
-
-      return response.choices[0]?.message?.content?.trim() || "";
+      return response.output[0].type === "message" &&
+        response.output[0].content[0].type === "output_text"
+        ? response.output[0].content[0].text
+        : "";
     } else if (this.aiProvider === "deepseek" && this.openai) {
       // DeepSeek uses OpenAI compatible API
-      const responsePromise = this.openai.chat.completions.create({
+      const responsePromise = this.openai.responses.create({
         model: this.model,
-        max_tokens: 1024,
-        response_format: options.format ? { type: "json_object" } : undefined,
-        messages: [
+        text: {
+          format: {
+            type: "json_schema",
+            name: "locatorQuerySchema",
+            schema: zodResponseFormat(LocatorQuerySchema, "locatorQuerySchema")
+              .json_schema.schema as Record<string, unknown>,
+          },
+        },
+        input: [
           {
             role: "system",
             content:
@@ -415,7 +433,10 @@ export class A11yAILocator {
           ? await Promise.race([responsePromise, options.timeoutPromise])
           : await responsePromise;
 
-      return response.choices[0]?.message?.content?.trim() || "";
+        return response.output[0].type === "message" &&
+          response.output[0].content[0].type === "output_text"
+          ? response.output[0].content[0].text
+          : "";
     } else if (this.aiProvider === "gemini" && this.googleAI) {
       const genAI = this.googleAI;
       const model = genAI.getGenerativeModel({
@@ -440,33 +461,26 @@ export class A11yAILocator {
         ],
       });
 
-      model.generateContent({
+      const responsePromise = model.generateContent({
         contents: [
-          { role: "user", parts: [{text: prompt}] },
-          { role: "assistant", parts: [{text:"{"}] },
+          { role: "user", parts: [{ text: prompt }] },
+          { role: "model", parts: [{ text: "{" }] },
         ],
         generationConfig: {
           responseMimeType: "application/json",
         },
       });
 
-      const responsePromise = model.generateContent([
-        options.systemPrompt ||
-          "Return only the query name and parameters. Be concise.",
-        prompt,
-        "{",
-      ]);
-
       const response =
         options.useTimeout && options.timeoutPromise
           ? await Promise.race([responsePromise, options.timeoutPromise])
           : await responsePromise;
-
+      console.log(response.response.text().trim());
       return response.response.text().trim();
     } else if (this.ollama) {
       const responsePromise = this.ollama.chat({
         model: this.model,
-        format: options.format,
+        format: zodToJsonSchema(LocatorQuerySchema) as string,
         options: {
           num_ctx: 8192,
         },
@@ -544,6 +558,7 @@ export function createA11yAILocator(
     snapshotFilePath?: string;
     apiKey?: string;
     timeout?: number;
+    useSimplifiedHtml?: boolean;
   }
 ): A11yAILocator {
   return new A11yAILocator(page, testInfo, { ...options, testInstance });

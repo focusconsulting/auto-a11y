@@ -29,14 +29,20 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@aws-sdk/client-bedrock": "^3.777.0",
+    "@google/generative-ai": "^0.24.0",
+    "@techery/zod-to-vertex-schema": "^0.1.4",
     "@testing-library/dom": "^9.3.3",
     "cheerio": "^1.0.0",
     "ollama": "^0.4.0",
-    "sanitize-html": "^2.11.0"
+    "openai": "^4.91.0",
+    "sanitize-html": "^2.11.0",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
-    "@types/cheerio": "^0.22.35",
     "@playwright/test": "^1.39.0",
+    "@types/cheerio": "^0.22.35",
     "@types/node": "^20.2.5",
     "@types/sanitize-html": "^2.9.4",
     "prettier": "^2.8.8",

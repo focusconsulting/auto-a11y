@@ -72,9 +72,6 @@ Query:
  * @returns Formatted prompt string
  */
 export function createSimpleLocatorPrompt(description: string, simplifiedHTML: string): string {
-
-// Re-export the schema for convenience
-export { LocatorQuerySchema, LocatorQuery } from "./locator-schema";
   return `
 Find the most appropriate Testing Library query for this element: "${description}"
 
@@ -90,3 +87,6 @@ HTML:
 ${simplifiedHTML}
 `;
 }
+
+// Re-export the schema for convenience
+export { LocatorQuerySchema, LocatorQuery } from "./locator-schema";
