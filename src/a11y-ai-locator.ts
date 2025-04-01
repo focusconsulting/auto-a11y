@@ -245,8 +245,7 @@ export class A11yAILocator {
                 timeoutPromise,
                 systemPrompt:
                   "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
-                  // AI! refactor this so zodToJsonSchema occurs inside executePrompt
-                format: zodToJsonSchema(LocatorQuerySchema) as string,
+                schema: LocatorQuerySchema,
               });
 
               return LocatorQuerySchema.parse(JSON.parse(queryInfo));
@@ -318,6 +317,7 @@ export class A11yAILocator {
     // Get the query suggestion from the appropriate AI provider
     const queryInfo = await this.executePrompt(prompt, {
       systemPrompt: "Return only the query name and parameters. Be concise.",
+      schema: LocatorQuerySchema,
     });
 
     const locatorQuery = LocatorQuerySchema.parse(JSON.parse(queryInfo));
@@ -338,8 +338,13 @@ export class A11yAILocator {
       timeoutPromise?: Promise<never>;
       systemPrompt?: string;
       format?: string;
+      schema?: any;
     } = {}
   ): Promise<string> {
+    // Convert schema to JSON schema if provided
+    if (options.schema && !options.format) {
+      options.format = zodToJsonSchema(options.schema) as string;
+    }
     if (this.aiProvider === "anthropic" && this.anthropic) {
       const responsePromise = this.anthropic.messages.create({
         model: this.model,
