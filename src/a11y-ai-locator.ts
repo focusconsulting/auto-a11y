@@ -34,11 +34,9 @@ export class A11yAILocator {
     | "gemini"
     | "deepseek"
     | "bedrock";
-  private useSimplifiedHtml: boolean = false;
   private snapshotFilePath: string | null = null;
   private cachedBodyContent: string | null = null;
   private lastHtml: string | null = null;
-  private timeout: number;
   private snapshotManager: SnapshotManager;
   private testInstance: any;
 
@@ -62,10 +60,8 @@ export class A11yAILocator {
       useSimplifiedHtml?: boolean;
     }
   ) {
-    this.useSimplifiedHtml = options.useSimplifiedHtml || false;
     this.testInstance = options.testInstance || null;
     this.page = page;
-    this.timeout = options.timeout || 60000; // Default 60 seconds
     this.aiProvider = options.provider;
 
     // Set default models based on provider if not specified
@@ -223,7 +219,7 @@ export class A11yAILocator {
     if (this.lastHtml === html && this.cachedBodyContent) {
       bodyContent = this.cachedBodyContent;
     } else {
-      bodyContent = extractBodyContent(html, description);
+      bodyContent = extractBodyContent(html);
       // Cache the results
       this.lastHtml = html;
       this.cachedBodyContent = bodyContent;
@@ -234,6 +230,7 @@ export class A11yAILocator {
 
     try {
       // Set up a timeout for the AI request
+      // AI! I want to remove this timeout functionality
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(
           () => reject(new Error("AI request timed out")),
@@ -274,38 +271,10 @@ export class A11yAILocator {
       return this.executeTestingLibraryQuery(locatorQuery);
     } catch (error) {
       console.warn(
-        `AI request failed or timed out: ${error}. Trying with simplified HTML...`
+        `AI request failed or timed out: ${error}. Running getByText with the description`
       );
 
-      // If simplified HTML is enabled or the main approach failed
-      if (this.useSimplifiedHtml || true) {
-        try {
-          const locatorQuery = await this.locateWithSimplifiedHTML(
-            description,
-            html
-          );
-
-          // Save the snapshot for future use
-          this.snapshotManager.saveSnapshot(description, locatorQuery);
-
-          // Execute the appropriate Testing Library query
-          return this.executeTestingLibraryQuery(locatorQuery);
-        } catch (fallbackError) {
-          console.error(`Simplified HTML approach also failed: ${fallbackError}`);
-
-          // Last resort: try a simple text search
-          console.warn(
-            `Falling back to simple text search for: "${description}"`
-          );
-          return this.page.getByText(description, { exact: false });
-        }
-      } else {
-        // If simplified HTML is disabled, just fall back to simple text search
-        console.warn(
-          `Simplified HTML is disabled. Falling back to simple text search for: "${description}"`
-        );
-        return this.page.getByText(description, { exact: false });
-      }
+      return this.page.getByText(description, { exact: false });
     }
   }
 
@@ -563,8 +532,6 @@ export function createA11yAILocator(
     baseUrl?: string;
     snapshotFilePath?: string;
     apiKey?: string;
-    timeout?: number;
-    useSimplifiedHtml?: boolean;
   }
 ): A11yAILocator {
   return new A11yAILocator(page, testInfo, { ...options, testInstance });
