@@ -75,13 +75,13 @@ export class A11yAILocator {
           this.model = "claude-3-haiku-20240307";
           break;
         case "openai":
-          this.model = "gpt-4o";
+          this.model = "gpt-4o-mini";
           break;
         case "gemini":
           this.model = "gemini-2.5-pro-exp-03-25";
           break;
         case "deepseek":
-          this.model = "DeepSeek-V3";
+          this.model = "deepseek-chat";
           break;
         case "bedrock":
           throw new Error("Model must be specified for Bedrock provider");
@@ -380,8 +380,7 @@ export class A11yAILocator {
           format: {
             type: "json_schema",
             name: "locatorQuerySchema",
-            schema: zodResponseFormat(LocatorQuerySchema, "locatorQuerySchema")
-              .json_schema.schema as Record<string, unknown>,
+            schema: zodToJsonSchema(LocatorQuerySchema)
           },
         },
         input: [
@@ -406,17 +405,10 @@ export class A11yAILocator {
         : "";
     } else if (this.aiProvider === "deepseek" && this.openai) {
       // DeepSeek uses OpenAI compatible API
-      const responsePromise = this.openai.responses.create({
+      
+      this.openai.chat.completions.create({
         model: this.model,
-        text: {
-          format: {
-            type: "json_schema",
-            name: "locatorQuerySchema",
-            schema: zodResponseFormat(LocatorQuerySchema, "locatorQuerySchema")
-              .json_schema.schema as Record<string, unknown>,
-          },
-        },
-        input: [
+        messages: [
           {
             role: "system",
             content:
@@ -426,17 +418,31 @@ export class A11yAILocator {
           { role: "user", content: prompt },
           { role: "assistant", content: "{" },
         ],
-      });
+        response_format: {type: "json_object"}
+      })
+
+      const responsePromise = this.openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: "system",
+            content:
+              options.systemPrompt ||
+              "Return only the query name and parameters. Be concise.",
+          },
+          { role: "user", content: prompt },
+          { role: "assistant", content: "{" },
+        ],
+        response_format: {type: "json_object"}
+      })
+      
 
       const response =
         options.useTimeout && options.timeoutPromise
           ? await Promise.race([responsePromise, options.timeoutPromise])
           : await responsePromise;
-
-        return response.output[0].type === "message" &&
-          response.output[0].content[0].type === "output_text"
-          ? response.output[0].content[0].text
-          : "";
+        return response.choices[0]?.message?.content || ""
+        
     } else if (this.aiProvider === "gemini" && this.googleAI) {
       const genAI = this.googleAI;
       const model = genAI.getGenerativeModel({

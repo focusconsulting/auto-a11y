@@ -12,7 +12,7 @@ export const LocatorQuerySchema = z.object({
     "getByText",
     "getByTestId"
   ]),
-  params: z.array(z.string()).min(1)
+  params: z.array(z.string())
 });
 
 /**
