@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import sanitizeHtml from "sanitize-html";
 
 /**
  * Simplifies HTML by keeping only essential elements and attributes
@@ -6,52 +7,31 @@ import * as cheerio from "cheerio";
  * @returns Simplified HTML string
  */
 export function simplifyHtml(html: string): string {
-  const $ = cheerio.load(html);
-
-  // Keep only essential elements and their text content
-  $("*").each((_, el) => {
-    const element = $(el);
-    // Keep only elements that might be interactive or contain text
-
-    if (el.type == "tag") {
-      const tagName = el.tagName?.toLowerCase() || "";
-      const isImportant = [
-        "a",
-        "button",
-        "input",
-        "select",
-        "textarea",
-        "label",
-        "h1",
-        "h2",
-        "h3",
-        "h4",
-        "h5",
-        "h6",
-        "p",
-      ].includes(tagName);
-
-      if (
-        !isImportant &&
-        !element.has("a, button, input, select, textarea, label").length
-      ) {
-        // Remove attributes except role, aria-* and data-testid
-        const attribs = element.attr();
-        Object.keys(attribs).forEach((attr) => {
-          if (
-            attr !== "role" &&
-            !attr.startsWith("aria-") &&
-            attr !== "data-testid"
-          ) {
-            element.removeAttr(attr);
-          }
-        });
-      }
+  return sanitizeHtml(html, {
+    allowedTags: [
+      "a",
+      "button",
+      "input",
+      "select",
+      "textarea",
+      "label",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "p",
+      "img",
+    ],
+    exclusiveFilter: (frame) => {
+      // TODO: check how this function works
+      return (frame.tag === "div" || frame.tag === "span")  && Object.keys(frame.attribs).includes("role")
+    },
+    allowedAttributes: {
+      "*": ["checked", "aria-*", "name", "data-testid", "role", "region", "value"] 
     }
   });
-
-  // Return the simplified HTML
-  return $("body").html() || $.html();
 }
 
 /**
@@ -60,13 +40,18 @@ export function simplifyHtml(html: string): string {
  * @param description The element description to help focus the extraction
  * @returns Sanitized body content
  */
-export function extractBodyContent(html: string, description: string): string {
-  try {
-    const $ = cheerio.load(html);
+export function extractBodyContent(
+  html: string
+): string {
 
-    // Remove scripts, styles, SVGs, and inline images
-    $("script, style, svg").remove();
-    $("img[src^='data:']").remove();
+  try {
+    const cleaned = sanitizeHtml(html, {
+      allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img"]),
+      allowedAttributes: {
+        "*": ["checked", "aria-*", "name", "data-testid", "role", "region", "value"] 
+      }
+    });
+    const $ = cheerio.load(cleaned);
 
     // Simplify deeply nested structures
     $("div > div:only-child").each((_, el) => {
@@ -85,76 +70,12 @@ export function extractBodyContent(html: string, description: string): string {
     // Remove empty containers
     $("div:empty, span:empty").remove();
 
-    // Remove data attributes and classes
-    $("*").each((_, el) => {
-      const element = $(el);
-      // Remove all data-* attributes except data-testid
-      Object.keys(element.attr())
-        .filter((attr) => attr.startsWith("data-") && attr !== "data-testid")
-        .forEach((attr) => element.removeAttr(attr));
-
-      // Remove class attributes
-      element.removeAttr("class");
-
-      // Remove other non-essential attributes
-      ["id", "style"].forEach((attr) => element.removeAttr(attr));
-    });
-
-    // Try to find elements that might match the description
-    const searchTerms = description.toLowerCase().split(/\s+/);
-    let relevantElements: cheerio.Cheerio = $("");
-
-    // Look for elements containing text similar to the description
-    $("body *").each((_, el) => {
-      const text = $(el).text().toLowerCase();
-      if (searchTerms.some((term) => text.includes(term))) {
-        relevantElements = relevantElements.add(el);
-      }
-    });
-
-    // If we found relevant elements, include them and their context
-    if (relevantElements.length > 0) {
-      let contextHTML = "";
-      relevantElements.each((_, el) => {
-        // Get the element and its parent context (up to 2 levels)
-        const element = $(el);
-        const parent = element.parent();
-        const grandparent = parent.parent();
-
-        // Add the grandparent's HTML if it's not too large
-        const grandparentHtml = grandparent.html();
-        const parentHtml = parent.html();
-
-        if (grandparentHtml && grandparentHtml.length < 5000) {
-          contextHTML +=
-            grandparent.clone().wrap("<div>").parent().html() + "\n";
-        } else if (parentHtml && parentHtml.length < 5000) {
-          contextHTML += parent.clone().wrap("<div>").parent().html() + "\n";
-        } else {
-          contextHTML += element.clone().wrap("<div>").parent().html() + "\n";
-        }
-      });
-
-      // If we have context HTML, return it (with deduplication)
-      if (contextHTML) {
-        // Simple deduplication by converting to a Set and back
-        const lines = [...new Set(contextHTML.split("\n"))];
-        return lines.join("\n").trim();
-      }
-    }
-
     // If no relevant elements found or context extraction failed,
     // get the body content and truncate if necessary
     let bodyContent = $("body").html() || $.html();
 
-    // Truncate if too large (keep first and last parts which often contain important UI elements)
-    const maxLength = 15000; // Adjust based on your model's context window
-    if (bodyContent.length > maxLength) {
-      const firstPart = bodyContent.substring(0, maxLength / 2);
-      const lastPart = bodyContent.substring(
-        bodyContent.length - maxLength / 2
-      );
-      bodyContent = firstPart + "\n...[content truncated]...\n" + lastPart;
+    if(bodyContent.length > 8192) {
+      console.warn("Body content might be too large for the context window")
     }
 
     return bodyContent.trim();

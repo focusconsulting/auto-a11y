@@ -2,7 +2,6 @@ import { Page, Locator, TestInfo } from "@playwright/test";
 import { Ollama } from "ollama";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import { zodResponseFormat } from "openai/helpers/zod";
 import {
   GoogleGenerativeAI,
   HarmCategory,
@@ -18,7 +17,6 @@ import {
 } from "./prompt";
 import { extractBodyContent, simplifyHtml } from "./sanitize-html";
 import zodToJsonSchema from "zod-to-json-schema";
-import { zodToVertexSchema } from "@techery/zod-to-vertex-schema";
 
 export class A11yAILocator {
   private page: Page;
@@ -455,7 +453,7 @@ export class A11yAILocator {
         model: this.model,
         format: zodToJsonSchema(LocatorQuerySchema) as string,
         options: {
-          num_ctx: 8192,
+          num_ctx: 8192 + prompt.length,
         },
         messages: [
           { role: "user", content: prompt },
@@ -463,10 +461,7 @@ export class A11yAILocator {
         ],
       });
 
-      const response =
-        options.useTimeout && options.timeoutPromise
-          ? await Promise.race([responsePromise, options.timeoutPromise])
-          : await responsePromise;
+      const response =  await responsePromise;
 
       return response.message.content.trim();
     } else {

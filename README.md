@@ -27,27 +27,6 @@ A11yAILocator is a Playwright utility that uses AI to generate accessible select
   5. `getByTestId` - Data test IDs
   6. `getByAltText` - Image alt text
 
-## Installation
-
-```bash
-npm install --save-dev @playwright/test
-
-# For Ollama support (local models)
-npm install --save-dev ollama
-
-# For Anthropic Claude support
-npm install --save-dev @anthropic-ai/sdk
-
-# For OpenAI support
-npm install --save-dev openai
-
-# For Google Gemini support
-npm install --save-dev @google/generative-ai
-
-# For additional utilities
-npm install --save-dev zod-to-json-schema @techery/zod-to-vertex-schema
-```
-
 ## Usage
 
 ### Basic Example
