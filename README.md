@@ -1,3 +1,4 @@
+<!-- AI! update this readme to reflect the usage of a11y-ai-locator and document the provider/models -->
 # A11y AI Locator
 
 A powerful tool that combines AI with accessibility-first element selection for Playwright tests.
