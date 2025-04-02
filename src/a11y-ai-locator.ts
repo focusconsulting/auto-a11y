@@ -34,6 +34,7 @@ export class A11yAILocator {
     | "gemini"
     | "deepseek"
     | "bedrock";
+  private useSimplifiedHtml: boolean = false;
   private snapshotFilePath: string | null = null;
   private cachedBodyContent: string | null = null;
   private lastHtml: string | null = null;
@@ -60,6 +61,7 @@ export class A11yAILocator {
       useSimplifiedHtml?: boolean;
     }
   ) {
+    this.useSimplifiedHtml = options.useSimplifiedHtml || false;
     this.testInstance = options.testInstance || null;
     this.page = page;
     this.aiProvider = options.provider;
@@ -229,22 +231,12 @@ export class A11yAILocator {
     const prompt = createLocatorPrompt(description, bodyContent);
 
     try {
-      // Set up a timeout for the AI request
-      // AI! I want to remove this timeout functionality
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(
-          () => reject(new Error("AI request timed out")),
-          this.timeout
-        );
-      });
       const locatorQuery = this.testInstance
         ? await this.testInstance.step(
             `auto-a11y locating: ${description}`,
             async () => {
-              // Make the AI request with timeout
+              // Make the AI request
               const queryInfo = await this.executePrompt(prompt, {
-                useTimeout: true,
-                timeoutPromise,
                 systemPrompt:
                   "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
               });
@@ -256,8 +248,6 @@ export class A11yAILocator {
           LocatorQuerySchema.parse(
             JSON.parse(
               await this.executePrompt(prompt, {
-                useTimeout: true,
-                timeoutPromise,
                 systemPrompt:
                   "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
               })
@@ -271,9 +261,31 @@ export class A11yAILocator {
       return this.executeTestingLibraryQuery(locatorQuery);
     } catch (error) {
       console.warn(
-        `AI request failed or timed out: ${error}. Running getByText with the description`
+        `AI request failed: ${error}.`
       );
 
+      // Check if simplified HTML approach should be used
+      if (this.useSimplifiedHtml) {
+        try {
+          const locatorQuery = await this.locateWithSimplifiedHTML(
+            description,
+            html
+          );
+          
+          // Save the snapshot for future use
+          this.snapshotManager.saveSnapshot(description, locatorQuery);
+
+          // Execute the appropriate Testing Library query
+          return this.executeTestingLibraryQuery(locatorQuery);
+        } catch (fallbackError) {
+          console.error(`Simplified HTML approach also failed: ${fallbackError}`);
+        }
+      }
+      
+      // Last resort: try a simple text search
+      console.warn(
+        `Falling back to simple text search for: "${description}"`
+      );
       return this.page.getByText(description, { exact: false });
     }
   }
@@ -313,8 +325,6 @@ export class A11yAILocator {
   private async executePrompt(
     prompt: string,
     options: {
-      useTimeout?: boolean;
-      timeoutPromise?: Promise<never>;
       systemPrompt?: string;
     } = {}
   ): Promise<string> {
@@ -331,10 +341,7 @@ export class A11yAILocator {
         ],
       });
 
-      const response =
-        options.useTimeout && options.timeoutPromise
-          ? await Promise.race([responsePromise, options.timeoutPromise])
-          : await responsePromise;
+      const response = await responsePromise;
 
       const textContent = response.content.find((item) => item.type === "text");
       if (textContent && "text" in textContent) {
@@ -364,10 +371,7 @@ export class A11yAILocator {
         ],
       });
 
-      const response =
-        options.useTimeout && options.timeoutPromise
-          ? await Promise.race([responsePromise, options.timeoutPromise])
-          : await responsePromise;
+      const response = await responsePromise;
       return response.output[0].type === "message" &&
         response.output[0].content[0].type === "output_text"
         ? response.output[0].content[0].text
@@ -406,10 +410,7 @@ export class A11yAILocator {
       })
       
 
-      const response =
-        options.useTimeout && options.timeoutPromise
-          ? await Promise.race([responsePromise, options.timeoutPromise])
-          : await responsePromise;
+      const response = await responsePromise;
         return response.choices[0]?.message?.content || ""
         
     } else if (this.aiProvider === "gemini" && this.googleAI) {
@@ -446,10 +447,7 @@ export class A11yAILocator {
         },
       });
 
-      const response =
-        options.useTimeout && options.timeoutPromise
-          ? await Promise.race([responsePromise, options.timeoutPromise])
-          : await responsePromise;
+      const response = await responsePromise;
       console.log(response.response.text().trim());
       return response.response.text().trim();
     } else if (this.ollama) {
@@ -532,6 +530,7 @@ export function createA11yAILocator(
     baseUrl?: string;
     snapshotFilePath?: string;
     apiKey?: string;
+    useSimplifiedHtml?: boolean;
   }
 ): A11yAILocator {
   return new A11yAILocator(page, testInfo, { ...options, testInstance });
