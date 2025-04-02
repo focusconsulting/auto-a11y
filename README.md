@@ -1,19 +1,23 @@
-<!-- AI! update this readme to reflect the usage of a11y-ai-locator and document the provider/models -->
 # A11y AI Locator
 
 A powerful tool that combines AI with accessibility-first element selection for Playwright tests.
 
 ## Overview
 
-A11yAILocator is a Playwright utility that uses AI to generate accessible selectors for web elements based on natural language descriptions. It leverages either Ollama (local) or Anthropic Claude (cloud) to analyze page content and determine the most appropriate Testing Library query for locating elements.
+A11yAILocator is a Playwright utility that uses AI to generate accessible selectors for web elements based on natural language descriptions. It leverages multiple AI providers to analyze page content and determine the most appropriate Testing Library query for locating elements.
 
 ## Features
 
 - **Natural Language Element Selection**: Find elements using human-readable descriptions
 - **Accessibility-First Approach**: Prioritizes accessible selectors following Testing Library best practices
-- **Multiple AI Backends**: 
-  - Local: Ollama with models like `deep-seek-auto-a11y`
-  - Cloud: Anthropic Claude models like `claude-3-7`
+- **Multiple AI Providers**: 
+  - **Ollama**: Local models like `llama3` or `mistral`
+  - **Anthropic**: Claude models like `claude-3-haiku-20240307` or `claude-3-opus-20240229`
+  - **OpenAI**: Models like `gpt-4o-mini` or `gpt-4o`
+  - **Google Gemini**: Models like `gemini-2.5-pro-exp-03-25`
+  - **DeepSeek**: Models like `deepseek-chat`
+  - **Bedrock**: AWS Bedrock models
+- **Simplified HTML Option**: Can use simplified HTML for better AI processing
 - **Snapshot Support**: Saves successful locators to JSON files for faster test runs
 - **Testing Library Integration**: Uses the same query priority as Testing Library:
   1. `getByRole` - ARIA roles with accessible names
@@ -26,9 +30,22 @@ A11yAILocator is a Playwright utility that uses AI to generate accessible select
 ## Installation
 
 ```bash
-npm install --save-dev @playwright/test ollama
-# For Claude support
+npm install --save-dev @playwright/test
+
+# For Ollama support (local models)
+npm install --save-dev ollama
+
+# For Anthropic Claude support
 npm install --save-dev @anthropic-ai/sdk
+
+# For OpenAI support
+npm install --save-dev openai
+
+# For Google Gemini support
+npm install --save-dev @google/generative-ai
+
+# For additional utilities
+npm install --save-dev zod-to-json-schema @techery/zod-to-vertex-schema
 ```
 
 ## Usage
@@ -40,8 +57,11 @@ import { test, expect } from '@playwright/test';
 import { createA11yAILocator } from './src/a11y-ai-locator';
 
 test('example test', async ({ page }, testInfo) => {
-  // Create an instance with default settings (Ollama)
-  const locator = createA11yAILocator(page, testInfo);
+  // Create an instance with Anthropic Claude (default model: claude-3-haiku-20240307)
+  const locator = createA11yAILocator(page, testInfo, test, {
+    provider: 'anthropic',
+    apiKey: process.env.ANTHROPIC_API_KEY
+  });
   
   await page.goto('https://example.com');
   
@@ -54,22 +74,55 @@ test('example test', async ({ page }, testInfo) => {
 });
 ```
 
-### Using Claude
+### Using Different Providers
 
 ```typescript
-const locator = createA11yAILocator(page, testInfo, {
-  model: 'claude-3-7',
-  apiKey: process.env.ANTHROPIC_API_KEY
+// Using OpenAI
+const openaiLocator = createA11yAILocator(page, testInfo, test, {
+  provider: 'openai',
+  model: 'gpt-4o-mini',
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+// Using Google Gemini
+const geminiLocator = createA11yAILocator(page, testInfo, test, {
+  provider: 'gemini',
+  model: 'gemini-2.5-pro-exp-03-25',
+  apiKey: process.env.GEMINI_API_KEY
+});
+
+// Using Ollama (local)
+const ollamaLocator = createA11yAILocator(page, testInfo, test, {
+  provider: 'ollama',
+  model: 'llama3',
+  baseUrl: 'http://localhost:11434'
+});
+
+// Using DeepSeek
+const deepseekLocator = createA11yAILocator(page, testInfo, test, {
+  provider: 'deepseek',
+  model: 'deepseek-chat',
+  apiKey: process.env.DEEPSEEK_API_KEY
+});
+
+// Using AWS Bedrock
+const bedrockLocator = createA11yAILocator(page, testInfo, test, {
+  provider: 'bedrock',
+  model: 'anthropic.claude-3-sonnet-20240229-v1:0',
+  apiKey: process.env.AWS_ACCESS_KEY_ID
+  // Note: AWS_SECRET_ACCESS_KEY should be set as an environment variable
 });
 ```
 
-### Custom Configuration
+### Advanced Configuration
 
 ```typescript
-const locator = createA11yAILocator(page, testInfo, {
-  model: 'deep-seek-auto-a11y',  // Ollama model
-  baseUrl: 'http://localhost:11434',  // Ollama server URL
-  snapshotFilePath: './custom-snapshots/my-test.json'  // Custom snapshot location
+const locator = createA11yAILocator(page, testInfo, test, {
+  provider: 'anthropic',
+  model: 'claude-3-haiku-20240307',
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  snapshotFilePath: './custom-snapshots/my-test.json',  // Custom snapshot location
+  useSimplifiedHtml: true,  // Use simplified HTML for better AI processing
 });
 ```
 
@@ -119,7 +172,12 @@ Snapshots are saved in the `locator-snapshots` directory by default, with filena
 - Playwright
 - Node.js 16+
 - For local AI: Ollama running with appropriate models
-- For cloud AI: Anthropic API key
+- For cloud AI: API keys for your chosen provider(s)
+  - Anthropic API key for Claude
+  - OpenAI API key for GPT models
+  - Google API key for Gemini
+  - DeepSeek API key
+  - AWS credentials for Bedrock
 
 ## License
 
