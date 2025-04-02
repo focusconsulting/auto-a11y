@@ -1,133 +1,181 @@
 import { Page, Locator, TestInfo } from "@playwright/test";
 import { Ollama } from "ollama";
 import Anthropic from "@anthropic-ai/sdk";
-import * as fs from "fs";
-import * as path from "path";
-import * as cheerio from "cheerio";
+import OpenAI from "openai";
+import {
+  GoogleGenerativeAI,
+  HarmCategory,
+  HarmBlockThreshold,
+} from "@google/generative-ai";
+
+import { SnapshotManager } from "./snapshot-manager";
+import {
+  createLocatorPrompt,
+  createSimpleLocatorPrompt,
+  LocatorQuery,
+  LocatorQuerySchema,
+} from "./prompt";
+import { extractBodyContent, simplifyHtml } from "./sanitize-html";
+import zodToJsonSchema from "zod-to-json-schema";
 
 export class A11yAILocator {
   private page: Page;
   private ollama: Ollama | null = null;
   private anthropic: Anthropic | null = null;
+  private openai: OpenAI | null = null;
+  private googleAI: GoogleGenerativeAI | null = null;
   private model: string;
-  private aiProvider: "ollama" | "anthropic";
+  private aiProvider:
+    | "ollama"
+    | "anthropic"
+    | "openai"
+    | "gemini"
+    | "deepseek"
+    | "bedrock";
+  private useSimplifiedHtml: boolean = false;
   private snapshotFilePath: string | null = null;
   private cachedBodyContent: string | null = null;
   private lastHtml: string | null = null;
-  private timeout: number;
+  private snapshotManager: SnapshotManager;
+  private testInstance: any;
 
   constructor(
     page: Page,
     testInfo: TestInfo,
     options: {
       model?: string;
+      provider:
+        | "ollama"
+        | "anthropic"
+        | "openai"
+        | "gemini"
+        | "deepseek"
+        | "bedrock";
       baseUrl?: string;
       snapshotFilePath?: string;
       apiKey?: string;
       timeout?: number;
-    } = {}
+      testInstance?: any;
+      useSimplifiedHtml?: boolean;
+    }
   ) {
+    this.useSimplifiedHtml = options.useSimplifiedHtml || false;
+    this.testInstance = options.testInstance || null;
     this.page = page;
-    this.timeout = options.timeout || 60000; // Default 30 seconds
+    this.aiProvider = options.provider;
 
-    // Determine which AI provider to use based on the model
-    if (
-      options.model === "claude-3-7" ||
-      options.model?.startsWith("claude-")
-    ) {
-      this.aiProvider = "anthropic";
-      this.model = options.model || "claude-3-7";
-      this.anthropic = new Anthropic({
-        apiKey: options.apiKey || process.env.ANTHROPIC_API_KEY || "",
-      });
+    // Set default models based on provider if not specified
+    if (!options.model) {
+      switch (options.provider) {
+        case "anthropic":
+          this.model = "claude-3-haiku-20240307";
+          break;
+        case "openai":
+          this.model = "gpt-4o-mini";
+          break;
+        case "gemini":
+          this.model = "gemini-2.5-pro-exp-03-25";
+          break;
+        case "deepseek":
+          this.model = "deepseek-chat";
+          break;
+        case "bedrock":
+          throw new Error("Model must be specified for Bedrock provider");
+        case "ollama":
+          throw new Error("Model must be specified for Ollama provider");
+        default:
+          throw new Error(`Unknown provider: ${options.provider}`);
+      }
     } else {
-      this.aiProvider = "ollama";
-      this.model = options.model || "deep-seek-auto-a11y";
-      this.ollama = new Ollama({
-        host: options.baseUrl || "http://localhost:11434",
-      });
+      this.model = options.model;
+    }
+
+    // Initialize the appropriate client based on the provider
+    switch (this.aiProvider) {
+      case "anthropic":
+        const anthropicApiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
+        if (!anthropicApiKey) {
+          throw new Error(
+            "Anthropic API key is required. Provide it via options.apiKey or ANTHROPIC_API_KEY environment variable."
+          );
+        }
+        this.anthropic = new Anthropic({
+          apiKey: anthropicApiKey,
+        });
+        break;
+      case "openai":
+        const openaiApiKey = options.apiKey || process.env.OPENAI_API_KEY;
+        if (!openaiApiKey) {
+          throw new Error(
+            "OpenAI API key is required. Provide it via options.apiKey or OPENAI_API_KEY environment variable."
+          );
+        }
+        this.openai = new OpenAI({
+          apiKey: openaiApiKey,
+          baseURL: options.baseUrl, // Allow overriding for Azure OpenAI etc.
+        });
+        break;
+      case "gemini":
+        const geminiApiKey = options.apiKey || process.env.GEMINI_API_KEY;
+        if (!geminiApiKey) {
+          throw new Error(
+            "Gemini API key is required. Provide it via options.apiKey or GEMINI_API_KEY environment variable."
+          );
+        }
+        this.googleAI = new GoogleGenerativeAI(geminiApiKey);
+        break;
+      case "deepseek":
+        // DeepSeek uses OpenAI compatible API
+        const deepseekApiKey = options.apiKey || process.env.DEEPSEEK_API_KEY;
+        if (!deepseekApiKey) {
+          throw new Error(
+            "DeepSeek API key is required. Provide it via options.apiKey or DEEPSEEK_API_KEY environment variable."
+          );
+        }
+        this.openai = new OpenAI({
+          apiKey: deepseekApiKey,
+          baseURL: options.baseUrl || "https://api.deepseek.com/v1", // Default DeepSeek API endpoint
+        });
+        break;
+      case "bedrock":
+        if (!options.model) {
+          throw new Error("Model must be specified for Bedrock provider");
+        }
+        const bedrockApiKey = options.apiKey || process.env.AWS_ACCESS_KEY_ID;
+        const bedrockSecretKey = process.env.AWS_SECRET_ACCESS_KEY;
+        if (!bedrockApiKey || !bedrockSecretKey) {
+          throw new Error(
+            "AWS credentials are required for Bedrock. Provide AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
+          );
+        }
+
+        // Bedrock uses OpenAI compatible client
+        this.openai = new OpenAI({
+          apiKey: bedrockApiKey,
+          baseURL:
+            options.baseUrl ||
+            `https://bedrock-runtime.us-east-1.amazonaws.com/model/${this.model}`,
+        });
+        break;
+      case "ollama":
+        if (!options.model) {
+          throw new Error("Model must be specified for Ollama provider");
+        }
+        this.ollama = new Ollama({
+          host: options.baseUrl || "http://localhost:11434", // Ollama host
+        });
+        break;
     }
 
     // Default to test name if available, otherwise use provided path or null
     if (options.snapshotFilePath) {
       this.snapshotFilePath = options.snapshotFilePath;
     } else {
-      // Try to get test info from page context
-      if (testInfo.title) {
-        // Get the test file path and create a snapshot directory next to it
-        const testFilePath = testInfo.file;
-        const testDir = path.dirname(testFilePath);
-        const testFileName = path.basename(testFilePath, path.extname(testFilePath));
-        
-        // Create snapshots directory if it doesn't exist
-        const snapshotsDir = path.join(testDir, `__${testFileName}-locator-snapshots__`);
-        if (!fs.existsSync(snapshotsDir)) {
-          fs.mkdirSync(snapshotsDir, { recursive: true });
-        }
-        
-        // Use test name for snapshot file
-        this.snapshotFilePath = path.join(
-          snapshotsDir,
-          `${testInfo.title.replace(/\s+/g, "-")}.json`
-        );
-      } else {
-        this.snapshotFilePath = null;
-      }
-    }
-  }
-
-  /**
-   * Reads locator snapshots from the snapshot file
-   * @returns Object containing saved locators or empty object if file doesn't exist
-   */
-  private readSnapshots(): Record<
-    string,
-    { queryName: string; params: string[] }
-  > {
-    if (!this.snapshotFilePath) return {};
-
-    try {
-      if (fs.existsSync(this.snapshotFilePath)) {
-        const data = fs.readFileSync(this.snapshotFilePath, "utf8");
-        return JSON.parse(data);
-      }
-    } catch (error) {
-      console.warn(`Failed to read locator snapshots: ${error}`);
+      this.snapshotFilePath = SnapshotManager.createSnapshotPath(testInfo);
     }
 
-    return {};
-  }
-
-  /**
-   * Saves a locator to the snapshot file
-   * @param description The element description
-   * @param queryInfo The query information to save
-   */
-  private saveSnapshot(
-    description: string,
-    queryInfo: { queryName: string; params: string[] }
-  ): void {
-    if (!this.snapshotFilePath) return;
-
-    try {
-      // Ensure directory exists
-      const dir = path.dirname(this.snapshotFilePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-
-      // Read existing snapshots
-      const snapshots = this.readSnapshots();
-
-      // Add or update the snapshot
-      snapshots[description] = queryInfo;
-
-      // Write back to file with a replacer function to avoid escaping single quotes
-      const jsonString = JSON.stringify(snapshots, null, 2);
-      fs.writeFileSync(this.snapshotFilePath, jsonString, "utf8");
-    } catch (error) {
-      console.warn(`Failed to save locator snapshot: ${error}`);
-    }
+    // Initialize the snapshot manager
+    this.snapshotManager = new SnapshotManager(this.snapshotFilePath);
   }
 
   /**
@@ -137,17 +185,28 @@ export class A11yAILocator {
    */
   async locate(description: string): Promise<Locator> {
     // Check if we have a saved snapshot for this description
-    const snapshots = this.readSnapshots();
+    const snapshots = this.snapshotManager.readSnapshots();
     if (snapshots[description]) {
-      const { queryName, params } = snapshots[description];
-      const locator = this.executeTestingLibraryQuery(queryName, params);
+      const locatorQuery = snapshots[description];
+      const locator = this.executeTestingLibraryQuery(locatorQuery);
 
-      // Verify the locator exists on the page
-      const count = await locator.count();
-      if (count > 0) {
-        return locator;
+      const validSnapshotLocator: Locator | null = await this.testInstance.step(
+        `auto-a11y: attempting to use locator snapshot: ${
+          locatorQuery.query
+        }, ${locatorQuery.params.join(",")}`,
+        async () => {
+          // Verify the locator exists on the page
+          const count = await locator.count();
+          if (count > 0) {
+            return locator;
+          } else {
+            return null;
+          }
+        }
+      );
+      if (validSnapshotLocator) {
+        return validSnapshotLocator;
       }
-      // If locator doesn't exist, fall through to generate a new one
     }
 
     // Get the current page HTML
@@ -160,290 +219,72 @@ export class A11yAILocator {
     if (this.lastHtml === html && this.cachedBodyContent) {
       bodyContent = this.cachedBodyContent;
     } else {
-      bodyContent = this.extractBodyContent(html, description);
+      bodyContent = extractBodyContent(html);
       // Cache the results
       this.lastHtml = html;
       this.cachedBodyContent = bodyContent;
     }
 
-    const prompt = `
-You are an expert in accessibility testing with Testing Library. Given the HTML below and a description of an element,
-determine the most appropriate Testing Library query to locate that element.
-
-Return ONLY a JSON object with the following format:
-{"query": "queryName", "params": ["param1", "param2"]}
-
-For example:
-{"query": "getByRole", "params": ["button", "Submit"]}
-{"query": "getByText", "params": ["Sign up now"]}
-{"query": "getByLabelText", "params": ["Email address"]}
-{"query": "getByPlaceholderText", "params": ["Enter your name"]}
-{"query": "getByTestId", "params": ["login-form"]}
-
-IMPORTANT: you must return only the JSON object and nothing else.
-
-STRICT PRIORITY ORDER - You MUST follow this order when selecting a query type:
-
-1. getByRole - HIGHEST PRIORITY
-   - Use whenever possible if the element has a semantic role and accessible name
-   - Examples: getByRole: button, Submit | getByRole: heading, Welcome | getByRole: checkbox, Accept terms
-   - ONLY use with valid ARIA roles such as: alert, alertdialog, application, article, banner, button, cell, checkbox, columnheader, combobox, complementary, contentinfo, definition, dialog, directory, document, feed, figure, form, grid, gridcell, group, heading, img, link, list, listbox, listitem, log, main, marquee, math, menu, menubar, menuitem, meter, navigation, none, note, option, presentation, progressbar, radio, radiogroup, region, row, rowgroup, rowheader, scrollbar, search, searchbox, separator, slider, spinbutton, status, switch, tab, table, tablist, tabpanel, term, textbox, timer, toolbar, tooltip, tree, treegrid, treeitem
-   - NEVER use with non-ARIA roles like "paragraph", "span", "div", etc.
-
-2. getByLabelText - HIGH PRIORITY
-   - For form elements with associated labels
-   - Example: getByLabelText: Email address
-
-3. getByPlaceholderText
-   - For input elements with placeholder text
-   - Example: getByPlaceholderText: Enter your name
-
-4. getByAltText
-   - For images with alt text
-   - Example: getByAltText: Company logo
-
-5. getByText - LOWER PRIORITY
-   - Only use when options 1-4 are not applicable
-   - CRITICAL INSTRUCTION:                    
-     - You MUST provide the EXACT and COMPLETE text content of the element                                          
-     - NEVER return partial text                          
-     - Example: if element is <div>Yes, you can</div>, return "getByText: Yes, you can" (NOT just "Yes")       
-     - Example: if element is <button>Submit form</button>, return "getByText: Submit form" (NOT just "Submit")     
-     - ALWAYS include ALL text within the element 
-
-6. getByTestId - LOWEST PRIORITY
-   - Only use as a last resort when no other query would work
-   - Example: getByTestId: login-form
-
-Description: ${description}
-
-HTML:
-${bodyContent}
-
-Query:
-`;
+    // Create the prompt with the description and body content
+    const prompt = createLocatorPrompt(description, bodyContent);
 
     try {
-      // Set up a timeout for the AI request
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(
-          () => reject(new Error("AI request timed out")),
-          this.timeout
-        );
-      });
+      const locatorQuery = this.testInstance
+        ? await this.testInstance.step(
+            `auto-a11y locating: ${description}`,
+            async () => {
+              // Make the AI request
+              const queryInfo = await this.executePrompt(prompt, {
+                systemPrompt:
+                  "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
+              });
 
-      // Make the AI request with timeout
-      let queryInfo: string;
-      console.log(`Prompt size is: ${prompt.length}`)
-      if (this.aiProvider === "anthropic" && this.anthropic) {
-        const responsePromise = this.anthropic.messages.create({
-          model: this.model,
-          max_tokens: 1024,
-          system:
-            "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
-          messages: [{ role: "user", content: prompt }],
-        });
-
-        const response = await Promise.race([responsePromise, timeoutPromise]);
-        const textContent = response.content.find(
-          (item) => item.type === "text"
-        );
-        if (textContent && "text" in textContent) {
-          queryInfo = textContent.text.trim();
-        } else {
-          throw new Error("No text content found in Anthropic response");
-        }
-      } else if (this.ollama) {
-        const responsePromise = this.ollama.chat({
-          model: this.model,
-          messages: [{ role: "user", content: prompt }],
-        });
-
-        const response = await Promise.race([responsePromise, timeoutPromise]);
-        queryInfo = response.message.content.trim();
-      } else {
-        throw new Error("No AI provider configured");
-      }
-
-      // Parse the JSON response
-      let queryName: string;
-      let queryParams: string[];
-      
-      try {
-        // First try to extract JSON if it's wrapped in markdown code blocks
-        let jsonString = queryInfo;
-        const jsonRegex = /```(?:json)?\s*({[\s\S]*?})\s*```/;
-        const match = queryInfo.match(jsonRegex);
-        
-        if (match && match[1]) {
-          jsonString = match[1];
-        }
-        
-        const jsonResponse = JSON.parse(jsonString);
-        queryName = jsonResponse.query;
-        queryParams = jsonResponse.params || [];
-      } catch (error) {
-        console.warn(`Failed to parse JSON response: ${error}. Falling back to text parsing.`);
-        
-        // Fallback to the old text parsing method
-        const [name, ...params] = queryInfo
-          .split(":")
-          .map((part) => part.trim());
-          
-        queryName = name;
-        
-        // Handle parameters more carefully to avoid splitting text that contains commas
-        if (queryName.toLowerCase() === "getbytext") {
-          queryParams = [params.join(":").trim()];
-        } else {
-          // For other query types, we can split by comma as they typically have separate parameters
-          queryParams = params
-            .join(":")
-            .split(",")
-            .map((p) => p.trim());
-        }
-      }
+              return LocatorQuerySchema.parse(JSON.parse(queryInfo));
+            }
+          )
+        : // If no test instance is provided, execute without the step wrapper
+          LocatorQuerySchema.parse(
+            JSON.parse(
+              await this.executePrompt(prompt, {
+                systemPrompt:
+                  "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
+              })
+            )
+          );
 
       // Save the snapshot for future use
-      this.saveSnapshot(description, { queryName, params: queryParams });
+      this.snapshotManager.saveSnapshot(description, locatorQuery);
 
       // Execute the appropriate Testing Library query
-      return this.executeTestingLibraryQuery(queryName, queryParams);
+      return this.executeTestingLibraryQuery(locatorQuery);
     } catch (error) {
       console.warn(
-        `AI request failed or timed out: ${error}. Trying with simplified HTML...`
+        `AI request failed: ${error}.`
       );
 
-      // Fall back to simplified HTML approach
-      try {
-        const { queryName, params } = await this.locateWithSimplifiedHTML(
-          description,
-          html
-        );
+      // Check if simplified HTML approach should be used
+      if (this.useSimplifiedHtml) {
+        try {
+          const locatorQuery = await this.locateWithSimplifiedHTML(
+            description,
+            html
+          );
+          
+          // Save the snapshot for future use
+          this.snapshotManager.saveSnapshot(description, locatorQuery);
 
-        // Save the snapshot for future use
-        this.saveSnapshot(description, { queryName, params });
-
-        // Execute the appropriate Testing Library query
-        return this.executeTestingLibraryQuery(queryName, params);
-      } catch (fallbackError) {
-        console.error(`Simplified HTML approach also failed: ${fallbackError}`);
-
-        // Last resort: try a simple text search
-        console.warn(
-          `Falling back to simple text search for: "${description}"`
-        );
-        return this.page.getByText(description, { exact: false });
-      }
-    }
-  }
-
-  /**
-   * Extracts and sanitizes the body content from HTML
-   * @param html The full HTML content
-   * @param description The element description to help focus the extraction
-   * @returns Sanitized body content
-   */
-  private extractBodyContent(html: string, description: string): string {
-    try {
-      const $ = cheerio.load(html);
-
-      // Remove scripts, styles, SVGs, and inline images
-      $("script, style, svg").remove();
-      $("img[src^='data:']").remove();
-      
-      // Simplify deeply nested structures
-      $("div > div:only-child").each((_, el) => {
-        const $el = $(el);
-        const $parent = $el.parent();
-        if ($parent.children().length === 1 && !$el.is("button, a, input, select, textarea")) {
-          // Replace the parent with its children
-          const $children = $el.children();
-          $el.replaceWith($children);
-        }
-      });
-      
-      // Remove empty containers
-      $("div:empty, span:empty").remove();
-      
-      // Remove data attributes and classes
-      $("*").each((_, el) => {
-        const element = $(el);
-        // Remove all data-* attributes except data-testid
-        Object.keys(element.attr())
-          .filter((attr) => attr.startsWith("data-") && attr !== "data-testid")
-          .forEach((attr) => element.removeAttr(attr));
-
-        // Remove class attributes
-        element.removeAttr("class");
-
-        // Remove other non-essential attributes
-        ["id", "style"].forEach((attr) => element.removeAttr(attr));
-      });
-
-      // Try to find elements that might match the description
-      const searchTerms = description.toLowerCase().split(/\s+/);
-      let relevantElements: cheerio.Cheerio = $("");
-
-      // Look for elements containing text similar to the description
-      $("body *").each((_, el) => {
-        const text = $(el).text().toLowerCase();
-        if (searchTerms.some((term) => text.includes(term))) {
-          relevantElements = relevantElements.add(el);
-        }
-      });
-
-      // If we found relevant elements, include them and their context
-      if (relevantElements.length > 0) {
-        let contextHTML = "";
-        relevantElements.each((_, el) => {
-          // Get the element and its parent context (up to 2 levels)
-          const element = $(el);
-          const parent = element.parent();
-          const grandparent = parent.parent();
-
-          // Add the grandparent's HTML if it's not too large
-          const grandparentHtml = grandparent.html();
-          const parentHtml = parent.html();
-
-          if (grandparentHtml && grandparentHtml.length < 5000) {
-            contextHTML +=
-              grandparent.clone().wrap("<div>").parent().html() + "\n";
-          } else if (parentHtml && parentHtml.length < 5000) {
-            contextHTML += parent.clone().wrap("<div>").parent().html() + "\n";
-          } else {
-            contextHTML += element.clone().wrap("<div>").parent().html() + "\n";
-          }
-        });
-
-        // If we have context HTML, return it (with deduplication)
-        if (contextHTML) {
-          // Simple deduplication by converting to a Set and back
-          const lines = [...new Set(contextHTML.split("\n"))];
-          return lines.join("\n").trim();
+          // Execute the appropriate Testing Library query
+          return this.executeTestingLibraryQuery(locatorQuery);
+        } catch (fallbackError) {
+          console.error(`Simplified HTML approach also failed: ${fallbackError}`);
         }
       }
-
-      // If no relevant elements found or context extraction failed,
-      // get the body content and truncate if necessary
-      let bodyContent = $("body").html() || $.html();
-
-      // Truncate if too large (keep first and last parts which often contain important UI elements)
-      const maxLength = 15000; // Adjust based on your model's context window
-      if (bodyContent.length > maxLength) {
-        const firstPart = bodyContent.substring(0, maxLength / 2);
-        const lastPart = bodyContent.substring(
-          bodyContent.length - maxLength / 2
-        );
-        bodyContent = firstPart + "\n...[content truncated]...\n" + lastPart;
-      }
-
-      return bodyContent.trim();
-    } catch (error) {
-      console.warn(`Error extracting body content: ${error}`);
-      return html.length > 20000
-        ? html.substring(0, 10000) + "..." + html.substring(html.length - 10000)
-        : html;
+      
+      // Last resort: try a simple text search
+      console.warn(
+        `Falling back to simple text search for: "${description}"`
+      );
+      return this.page.getByText(description, { exact: false });
     }
   }
 
@@ -456,147 +297,176 @@ Query:
   private async locateWithSimplifiedHTML(
     description: string,
     html: string
-  ): Promise<{ queryName: string; params: string[] }> {
+  ): Promise<LocatorQuery> {
     // Create a much more simplified version of the HTML
-    const $ = cheerio.load(html);
-
-    // Keep only essential elements and their text content
-    $("*").each((_, el) => {
-      const element = $(el);
-      // Keep only elements that might be interactive or contain text
-
-      if (el.type == "tag") {
-        const tagName = el.tagName?.toLowerCase() || "";
-        const isImportant = [
-          "a",
-          "button",
-          "input",
-          "select",
-          "textarea",
-          "label",
-          "h1",
-          "h2",
-          "h3",
-          "h4",
-          "h5",
-          "h6",
-          "p",
-        ].includes(tagName);
-
-        if (
-          !isImportant &&
-          !element.has("a, button, input, select, textarea, label").length
-        ) {
-          // Remove attributes except role, aria-* and data-testid
-          const attribs = element.attr();
-          Object.keys(attribs).forEach((attr) => {
-            if (
-              attr !== "role" &&
-              !attr.startsWith("aria-") &&
-              attr !== "data-testid"
-            ) {
-              element.removeAttr(attr);
-            }
-          });
-        }
-      }
-    });
-
-    
-    // Get simplified HTML
-    const simplifiedHTML = $("body").html() || $.html();
+    const simplifiedHTML = simplifyHtml(html);
 
     // Create a simplified prompt
-    const prompt = `
-Find the most appropriate Testing Library query for this element: "${description}"
-
-Return ONLY a JSON object with the following format:
-{"query": "queryName", "params": ["param1", "param2"]}
-
-For example:
-{"query": "getByRole", "params": ["button", "Submit"]}
-
-Priority order: getByRole (highest), getByLabelText, getByPlaceholderText, getByAltText, getByText, getByTestId (lowest)
-
-HTML:
-${simplifiedHTML}
-`;
+    const prompt = createSimpleLocatorPrompt(description, simplifiedHTML);
 
     // Get the query suggestion from the appropriate AI provider
-    let queryInfo: string;
-    console.log(`Prompt size is: ${prompt.length}`)
+    const queryInfo = await this.executePrompt(prompt, {
+      systemPrompt: "Return only the query name and parameters. Be concise.",
+    });
+
+    const locatorQuery = LocatorQuerySchema.parse(JSON.parse(queryInfo));
+
+    return locatorQuery;
+  }
+
+  /**
+   * Executes a prompt against the configured AI provider
+   * @param prompt The prompt to send to the AI
+   * @param options Additional options for the AI request
+   * @returns The AI response as a string
+   */
+  private async executePrompt(
+    prompt: string,
+    options: {
+      systemPrompt?: string;
+    } = {}
+  ): Promise<string> {
     if (this.aiProvider === "anthropic" && this.anthropic) {
-      const response = await this.anthropic.messages.create({
+      const responsePromise = this.anthropic.messages.create({
         model: this.model,
         max_tokens: 1024,
-        system: "Return only the query name and parameters. Be concise.",
-        messages: [{ role: "user", content: prompt }],
+        system:
+          options.systemPrompt ||
+          "Return only the query name and parameters. Be concise.",
+        messages: [
+          { role: "user", content: prompt },
+          { role: "assistant", content: "{" },
+        ],
       });
-      // Handle different content types in the response
-      if (response.content[0].type === "text") {
-        queryInfo = response.content[0].text.trim();
+
+      const response = await responsePromise;
+
+      const textContent = response.content.find((item) => item.type === "text");
+      if (textContent && "text" in textContent) {
+        return textContent.text.trim();
       } else {
-        // If first content item isn't text, search for the first text item
-        const textContent = response.content.find(
-          (item) => item.type === "text"
-        );
-        if (textContent && "text" in textContent) {
-          queryInfo = textContent.text.trim();
-        } else {
-          throw new Error("No text content found in Anthropic response");
-        }
+        throw new Error("No text content found in Anthropic response");
       }
-    } else if (this.ollama) {
-      const response = await this.ollama.chat({
+    } else if (this.aiProvider === "openai" && this.openai) {
+      const responsePromise = this.openai.responses.create({
         model: this.model,
-        messages: [{ role: "user", content: prompt }],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "locatorQuerySchema",
+            schema: zodToJsonSchema(LocatorQuerySchema)
+          },
+        },
+        input: [
+          {
+            role: "system",
+            content:
+              options.systemPrompt ||
+              "Return only the query name and parameters. Be concise.",
+          },
+          { role: "user", content: prompt },
+          { role: "assistant", content: "{" },
+        ],
       });
-      queryInfo = response.message.content.trim();
+
+      const response = await responsePromise;
+      return response.output[0].type === "message" &&
+        response.output[0].content[0].type === "output_text"
+        ? response.output[0].content[0].text
+        : "";
+    } else if (this.aiProvider === "deepseek" && this.openai) {
+      // DeepSeek uses OpenAI compatible API
+      
+      this.openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: "system",
+            content:
+              options.systemPrompt ||
+              "Return only the query name and parameters. Be concise.",
+          },
+          { role: "user", content: prompt },
+          { role: "assistant", content: "{" },
+        ],
+        response_format: {type: "json_object"}
+      })
+
+      const responsePromise = this.openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: "system",
+            content:
+              options.systemPrompt ||
+              "Return only the query name and parameters. Be concise.",
+          },
+          { role: "user", content: prompt },
+          { role: "assistant", content: "{" },
+        ],
+        response_format: {type: "json_object"}
+      })
+      
+
+      const response = await responsePromise;
+        return response.choices[0]?.message?.content || ""
+        
+    } else if (this.aiProvider === "gemini" && this.googleAI) {
+      const genAI = this.googleAI;
+      const model = genAI.getGenerativeModel({
+        model: this.model,
+        safetySettings: [
+          {
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+        ],
+      });
+
+      const responsePromise = model.generateContent({
+        contents: [
+          { role: "user", parts: [{ text: prompt }] },
+          { role: "model", parts: [{ text: "{" }] },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      const response = await responsePromise;
+      console.log(response.response.text().trim());
+      return response.response.text().trim();
+    } else if (this.ollama) {
+      const responsePromise = this.ollama.chat({
+        model: this.model,
+        format: zodToJsonSchema(LocatorQuerySchema) as string,
+        options: {
+          num_ctx: 8192 + prompt.length,
+        },
+        messages: [
+          { role: "user", content: prompt },
+          { role: "assistant", content: "{" },
+        ],
+      });
+
+      const response =  await responsePromise;
+
+      return response.message.content.trim();
     } else {
       throw new Error("No AI provider configured");
     }
-
-    // Parse the JSON response
-    try {
-      // First try to extract JSON if it's wrapped in markdown code blocks
-      let jsonString = queryInfo;
-      const jsonRegex = /```(?:json)?\s*({[\s\S]*?})\s*```/;
-      const match = queryInfo.match(jsonRegex);
-      
-      if (match && match[1]) {
-        jsonString = match[1];
-      }
-      
-      const jsonResponse = JSON.parse(jsonString);
-      const queryName = jsonResponse.query;
-      const queryParams = jsonResponse.params || [];
-      return { queryName, params: queryParams };
-    } catch (error) {
-      console.warn(`Failed to parse JSON response: ${error}. Falling back to text parsing.`);
-      
-      // Fallback to the old text parsing method
-      const [queryName, ...params] = queryInfo
-        .split(":")
-        .map((part) => part.trim());
-
-      // Handle parameters more carefully to avoid splitting text that contains commas
-      let queryParams: string[] = [];
-
-      // For getByText, we want to preserve the entire text including any commas
-      if (queryName.toLowerCase() === "getbytext") {
-        queryParams = [params.join(":").trim()];
-      } else {
-        // For other query types, we can split by comma as they typically have separate parameters
-        queryParams = params
-          .join(":")
-          .split(",")
-          .map((p) => p.trim());
-      }
-      
-      return { queryName, params: queryParams };
-    }
-
-    // return { queryName, params: queryParams };
   }
 
   /**
@@ -605,36 +475,35 @@ ${simplifiedHTML}
    * @param params The parameters for the query
    * @returns Playwright Locator
    */
-  private executeTestingLibraryQuery(
-    queryName: string,
-    params: string[]
-  ): Locator {
-    switch (queryName.toLowerCase()) {
+  private executeTestingLibraryQuery(query: LocatorQuery): Locator {
+    switch (query.query.toLowerCase()) {
       case "getbyrole":
         // First param is role, second is name (optional)
-        if (params.length > 1) {
-          return this.page.getByRole(params[0] as any, { name: params[1] });
+        if (query.params.length > 1) {
+          return this.page.getByRole(query.params[0] as any, {
+            name: query.params[1],
+          });
         }
-        return this.page.getByRole(params[0] as any);
+        return this.page.getByRole(query.params[0] as any);
 
       case "getbytext":
-        return this.page.getByText(params[0], { exact: false });
+        return this.page.getByText(query.params[0], { exact: false });
 
       case "getbylabeltext":
-        return this.page.getByLabel(params[0]);
+        return this.page.getByLabel(query.params[0]);
 
       case "getbyplaceholdertext":
-        return this.page.getByPlaceholder(params[0]);
+        return this.page.getByPlaceholder(query.params[0]);
 
       case "getbytestid":
-        return this.page.getByTestId(params[0]);
+        return this.page.getByTestId(query.params[0]);
 
       case "getbyalttext":
-        return this.page.getByAltText(params[0]);
+        return this.page.getByAltText(query.params[0]);
 
       default:
         // Fallback to a basic text search if the query type is not recognized
-        return this.page.getByText(params[0]);
+        return this.page.getByText(query.params[0]);
     }
   }
 }
@@ -643,13 +512,21 @@ ${simplifiedHTML}
 export function createA11yAILocator(
   page: Page,
   testInfo: TestInfo,
-  options?: {
+  testInstance: any,
+  options: {
     model?: string;
+    provider:
+      | "ollama"
+      | "anthropic"
+      | "openai"
+      | "gemini"
+      | "deepseek"
+      | "bedrock";
     baseUrl?: string;
     snapshotFilePath?: string;
     apiKey?: string;
-    timeout?: number;
+    useSimplifiedHtml?: boolean;
   }
 ): A11yAILocator {
-  return new A11yAILocator(page, testInfo, options);
+  return new A11yAILocator(page, testInfo, { ...options, testInstance });
 }
