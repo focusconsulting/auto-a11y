@@ -212,7 +212,6 @@ export class A11yAILocator {
     // Get the current page HTML and URL
     const html = await this.page.content();
     const url = this.page.url();
-    console.log(url)
     // Extract and sanitize only the body content
     let bodyContent: string;
   
@@ -232,7 +231,6 @@ export class A11yAILocator {
 
     // Create the prompt with the description and body content
     const prompt = createLocatorPrompt(description, bodyContent);
-
     try {
       const locatorQuery = this.testInstance
         ? await this.testInstance.step(
@@ -243,7 +241,6 @@ export class A11yAILocator {
                 systemPrompt:
                   "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
               });
-              console.log(queryInfo)
               return LocatorQuerySchema.parse(JSON.parse(queryInfo));
             }
           )
@@ -451,7 +448,6 @@ export class A11yAILocator {
       });
 
       const response = await responsePromise;
-      console.log(response.response.text().trim());
       return response.response.text().trim();
     } else if (this.ollama) {
       const responsePromise = this.ollama.chat({
