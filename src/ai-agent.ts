@@ -146,7 +146,7 @@ Instruction: ${instruction}
   ): Promise<void> {
     switch (action) {
       case 'click':
-        await locator.click();
+        await locator.first().click();
         break;
       case 'fill':
         if (value === null) {
