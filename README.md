@@ -1,14 +1,17 @@
 # A11y AI Locator
 
-A powerful tool that combines AI with accessibility-first element selection for Playwright tests.
+A powerful tool that combines AI with accessibility-first element selection and natural language automation for Playwright tests.
 
 ## Overview
 
 A11yAILocator is a Playwright utility that uses AI to generate accessible selectors for web elements based on natural language descriptions. It leverages multiple AI providers to analyze page content and determine the most appropriate Testing Library query for locating elements.
 
+The library now includes an AIAgent that can interpret natural language instructions to perform actions on the page, making test automation even more intuitive.
+
 ## Features
 
 - **Natural Language Element Selection**: Find elements using human-readable descriptions
+- **Natural Language Actions**: Perform actions using plain English instructions
 - **Accessibility-First Approach**: Prioritizes accessible selectors following Testing Library best practices
 - **Multiple AI Providers**: 
   - **Ollama**: Local models like `llama3` or `mistral`
@@ -26,10 +29,11 @@ A11yAILocator is a Playwright utility that uses AI to generate accessible select
   4. `getByPlaceholderText` - Input placeholders
   5. `getByTestId` - Data test IDs
   6. `getByAltText` - Image alt text
+- **Tool-Based Architecture**: Modular design makes it easy to add new capabilities
 
 ## Usage
 
-### Basic Example
+### Basic Locator Example
 
 ```typescript
 import { test, expect } from '@playwright/test';
@@ -50,6 +54,32 @@ test('example test', async ({ page }, testInfo) => {
   
   await expect(heading).toBeVisible();
   await expect(button).toBeEnabled();
+});
+```
+
+### Using the AI Agent
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { createAIAgent } from './src/ai-agent';
+
+test('example test with AI agent', async ({ page }, testInfo) => {
+  // Create an AI agent with Anthropic Claude
+  const agent = createAIAgent(page, testInfo, test, {
+    provider: 'anthropic',
+    apiKey: process.env.ANTHROPIC_API_KEY
+  });
+  
+  await page.goto('https://example.com/login');
+  
+  // Execute natural language instructions
+  await agent.execute('type "testuser@example.com" in the email field');
+  await agent.execute('enter "password123" in the password field');
+  await agent.execute('click the login button');
+  
+  // You can also use the locate method directly when needed
+  const welcomeMessage = await agent.locate('the welcome message');
+  await expect(welcomeMessage).toBeVisible();
 });
 ```
 
@@ -107,6 +137,8 @@ const locator = createA11yAILocator(page, testInfo, test, {
 
 ## How It Works
 
+### A11yAILocator
+
 1. **Description Analysis**: When you call `locate()` with a description, the system first checks if there's a cached selector in the snapshot file.
 
 2. **HTML Extraction**: If no cached selector exists, it extracts the current page's HTML.
@@ -118,6 +150,19 @@ const locator = createA11yAILocator(page, testInfo, test, {
 5. **Locator Creation**: The system creates a Playwright locator using the suggested query.
 
 6. **Snapshot Saving**: Successful locators are saved to a JSON file for future use.
+
+### AIAgent
+
+1. **Instruction Analysis**: When you call `execute()` with an instruction, the agent extracts the current page's HTML.
+
+2. **AI Planning**: The HTML and instruction are sent to the AI model, which determines:
+   - What action to perform (click, fill, etc.)
+   - Which element to target
+   - Any additional values needed (text to type, etc.)
+
+3. **Tool Usage**: The agent uses the LocatorTool to find the target element.
+
+4. **Action Execution**: The agent performs the specified action on the located element.
 
 ## Snapshots
 

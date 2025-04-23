@@ -320,7 +320,7 @@ export class A11yAILocator {
    * @param options Additional options for the AI request
    * @returns The AI response as a string
    */
-  private async executePrompt(
+  public async executePrompt(
     prompt: string,
     options: {
       systemPrompt?: string;
