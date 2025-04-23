@@ -42,11 +42,12 @@ export class AIAgent {
   }
 
   /**
-   * Executes a natural language instruction using the appropriate tools
+   * Executes a natural language instruction with retry logic for JSON parsing
    * @param instruction Natural language instruction (e.g., "click the submit button")
+   * @param maxRetries Maximum number of retry attempts (default: 2)
    * @returns Promise that resolves when the action is complete
    */
-  async execute(instruction: string): Promise<void> {
+  async execute(instruction: string, maxRetries: number = 2): Promise<void> {
     // Get the current page HTML
     const html = await this.page.content();
     const bodyContent = extractBodyContent(html);
@@ -56,8 +57,8 @@ export class AIAgent {
       `${tool.name}: ${tool.description}`
     ).join('\n');
     
-    // Create the prompt for the AI
-    const prompt = `
+    // Create the base prompt for the AI
+    const basePrompt = `
 You are an expert in web automation with Playwright. Given the HTML below and an instruction,
 determine the action to perform and which elements to target.
 
@@ -92,28 +93,59 @@ ${bodyContent}
 Instruction: ${instruction}
 `;
 
-    try {
-      // Execute the prompt with the AI
-      const response = await this.aiLocator.executePrompt(prompt, {
-        systemPrompt: "You are a web automation assistant that helps users interact with web pages using natural language."
-      });
-      
-      // Parse the AI response
-      const actionPlan = JSON.parse(response);
-      
-      // Execute the action plan
-      return this.testInstance
-        ? await this.testInstance.step(
-            `auto-a11y: ${instruction}`,
-            async () => {
-              await this.executeActionPlan(actionPlan);
-            }
-          )
-        : await this.executeActionPlan(actionPlan);
-    } catch (error) {
-      console.error(`Failed to execute instruction: ${error}`);
-      throw new Error(`Failed to execute instruction "${instruction}": ${error}`);
+    let retries = 0;
+    let lastError = null;
+    let prompt = basePrompt;
+
+    while (retries <= maxRetries) {
+      try {
+        // Execute the prompt with the AI
+        const response = await this.aiLocator.executePrompt(prompt, {
+          systemPrompt: "You are a web automation assistant that helps users interact with web pages using natural language. Return ONLY valid JSON with no additional text or explanation."
+        });
+        
+        // Parse the AI response
+        let actionPlan;
+        try {
+          actionPlan = JSON.parse(response);
+        } catch (parseError) {
+          // If JSON parsing fails, create a more specific error message for the retry
+          throw new Error(`Invalid JSON response: ${response}`);
+        }
+        
+        // Execute the action plan
+        return this.testInstance
+          ? await this.testInstance.step(
+              `auto-a11y: ${instruction}`,
+              async () => {
+                await this.executeActionPlan(actionPlan);
+              }
+            )
+          : await this.executeActionPlan(actionPlan);
+      } catch (error) {
+        lastError = error;
+        
+        if (retries < maxRetries) {
+          // Create a retry prompt that includes the error message
+          prompt = `
+${basePrompt}
+
+Your previous response could not be parsed as valid JSON. Please try again and ensure you return ONLY a valid JSON object with no additional text, comments, or formatting.
+
+Error: ${error.message}
+`;
+          retries++;
+          console.warn(`Retry ${retries}/${maxRetries} for instruction: "${instruction}"`);
+        } else {
+          // We've exhausted our retries
+          console.error(`Failed to execute instruction after ${maxRetries} retries: ${error}`);
+          throw new Error(`Failed to execute instruction "${instruction}" after ${maxRetries} retries: ${error}`);
+        }
+      }
     }
+    
+    // This should never be reached due to the throw in the else block above
+    throw lastError;
   }
 
   /**
