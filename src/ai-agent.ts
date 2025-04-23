@@ -57,6 +57,7 @@ export class AIAgent {
       `${tool.name}: ${tool.description}`
     ).join('\n');
     
+    // AI! provide additional guidance that "first" should map to the zero index.  The llm is returning index: 1 when I ask for the first element
     // Create the base prompt for the AI
     const basePrompt = `
 You are an expert in web automation with Playwright. Given the HTML below and an instruction,
