@@ -101,7 +101,7 @@ Instruction: ${instruction}
       try {
         // Execute the prompt with the AI
         const response = await this.aiLocator.executePrompt(prompt, {
-          systemPrompt: "You are a web automation assistant that helps users interact with web pages using natural language. Return ONLY valid JSON with no additional text or explanation."
+          systemPrompt: "You are a web automation assistant that helps users interact with web pages using natural language. Return ONLY valid JSON with no additional text or explanation. Your response must be parseable by JSON.parse()."
         });
         
         // Parse the AI response

@@ -34,9 +34,8 @@ export class A11yAILocator {
     | "bedrock";
   private useSimplifiedHtml: boolean = false;
   private snapshotFilePath: string | null = null;
-  // AI! I need to make this a dictionary that maps the URL to the cached content so that this works through page turns
-  private cachedBodyContent: string | null = null;
-  private lastHtml: string | null = null;
+  private cachedBodyContentMap: Map<string, string> = new Map();
+  private lastHtmlMap: Map<string, string> = new Map();
   private snapshotManager: SnapshotManager;
   private testInstance: any;
 
@@ -210,20 +209,21 @@ export class A11yAILocator {
       }
     }
 
-    // Get the current page HTML
+    // Get the current page HTML and URL
     const html = await this.page.content();
+    const url = this.page.url();
 
     // Extract and sanitize only the body content
     let bodyContent: string;
 
-    // Use cached body content if HTML hasn't changed
-    if (this.lastHtml === html && this.cachedBodyContent) {
-      bodyContent = this.cachedBodyContent;
+    // Use cached body content if HTML hasn't changed for this URL
+    if (this.lastHtmlMap.get(url) === html && this.cachedBodyContentMap.has(url)) {
+      bodyContent = this.cachedBodyContentMap.get(url)!;
     } else {
       bodyContent = extractBodyContent(html);
-      // Cache the results
-      this.lastHtml = html;
-      this.cachedBodyContent = bodyContent;
+      // Cache the results for this URL
+      this.lastHtmlMap.set(url, html);
+      this.cachedBodyContentMap.set(url, bodyContent);
     }
 
     // Create the prompt with the description and body content
