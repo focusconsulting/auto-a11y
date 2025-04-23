@@ -34,6 +34,7 @@ export class A11yAILocator {
     | "bedrock";
   private useSimplifiedHtml: boolean = false;
   private snapshotFilePath: string | null = null;
+  // AI! I need to make this a dictionary that maps the URL to the cached content so that this works through page turns
   private cachedBodyContent: string | null = null;
   private lastHtml: string | null = null;
   private snapshotManager: SnapshotManager;
@@ -238,7 +239,7 @@ export class A11yAILocator {
                 systemPrompt:
                   "You must always return the COMPLETE text content for getByText queries, never partial matches. For example, if the element contains 'Yes, you can', you must return the entire text 'Yes, you can', not just 'Yes'.",
               });
-
+              console.log(queryInfo)
               return LocatorQuerySchema.parse(JSON.parse(queryInfo));
             }
           )
@@ -335,7 +336,7 @@ export class A11yAILocator {
           "Return only the query name and parameters. Be concise.",
         messages: [
           { role: "user", content: prompt },
-          { role: "assistant", content: "{" },
+          { role: "assistant", content: "" },
         ],
       });
 

@@ -132,7 +132,7 @@ ${basePrompt}
 
 Your previous response could not be parsed as valid JSON. Please try again and ensure you return ONLY a valid JSON object with no additional text, comments, or formatting.
 
-Error: ${error.message}
+Error: ${error instanceof Error ? error.message: "unknown error"}
 `;
           retries++;
           console.warn(`Retry ${retries}/${maxRetries} for instruction: "${instruction}"`);
