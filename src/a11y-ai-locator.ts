@@ -211,11 +211,12 @@ export class A11yAILocator {
 
     // Get the current page HTML and URL
     const html = await this.page.content();
+    // AI! rather than caching by url, if the URL has changed regenerate the html
     const url = this.page.url();
-
+    console.log(url)
     // Extract and sanitize only the body content
     let bodyContent: string;
-
+  
     // Use cached body content if HTML hasn't changed for this URL
     if (this.lastHtmlMap.get(url) === html && this.cachedBodyContentMap.has(url)) {
       bodyContent = this.cachedBodyContentMap.get(url)!;

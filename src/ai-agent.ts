@@ -114,6 +114,7 @@ Instruction: ${instruction}
         let actionPlan;
         try {
           actionPlan = JSON.parse(response);
+          console.log(actionPlan)
         } catch (parseError) {
           // If JSON parsing fails, create a more specific error message for the retry
           throw new Error(`Invalid JSON response: ${response}`);
@@ -210,7 +211,9 @@ Error: ${error instanceof Error ? error.message: "unknown error"}
   ): Promise<void> {
     switch (action) {
       case 'click':
-        await locator.click();
+        console.log("here")
+        await locator.click({clickCount: 2, force: true});
+        console.log("after")
         break;
       case 'fill':
         if (value === null) {
