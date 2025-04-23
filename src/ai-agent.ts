@@ -107,7 +107,7 @@ Instruction: ${instruction}
       try {
         // Execute the prompt with the AI
         const response = await this.aiLocator.executePrompt(prompt, {
-          systemPrompt: "You are a web automation assistant that helps users interact with web pages using natural language. Return ONLY valid JSON with no additional text or explanation. Your response must be parseable by JSON.parse(). When the instruction mentions 'first', use index: 0; 'second', use index: 1; 'third', use index: 2; 'last', use index: -1."
+          systemPrompt: "You are a web automation assistant that helps users interact with web pages using natural language. Return ONLY valid JSON with no additional text or explanation. Your response must be parseable by JSON.parse(). When the instruction mentions 'first', use index: 0; 'second', use index: 1; 'third', use index: 2; 'last', use index: -1. Do not include any markdown formatting, code blocks, or explanations in your response."
         });
         
         // Parse the AI response
