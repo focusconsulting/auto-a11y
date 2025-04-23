@@ -68,6 +68,7 @@ First, analyze the instruction to determine:
 1. What action to perform (click, fill, check, etc.)
 2. Which element to target
 3. Any additional values needed (text to type, etc.)
+4. If multiple elements might match, specify which one using a zero-based index (0 for first, 1 for second, etc.)
 
 Then, create a plan that uses the available tools to execute the instruction.
 
@@ -75,12 +76,15 @@ Return ONLY a JSON object with the following format:
 {
   "action": "click" | "fill" | "check" | "uncheck" | "select" | "press" | "hover" | "dblclick" | "focus" | "tap",
   "targetDescription": "description of the element to locate",
-  "value": "optional value for fill/select/press actions"
+  "value": "optional value for fill/select/press actions",
+  "index": 0 | 1 | 2 | -1 | null
 }
 
 For example:
-{"action": "click", "targetDescription": "the submit button", "value": null}
-{"action": "fill", "targetDescription": "the email field", "value": "user@example.com"}
+{"action": "click", "targetDescription": "the submit button", "value": null, "index": null}
+{"action": "fill", "targetDescription": "the email field", "value": "user@example.com", "index": null}
+{"action": "click", "targetDescription": "services link", "value": null, "index": 0}
+{"action": "click", "targetDescription": "services link", "value": null, "index": -1} // last element
 
 HTML:
 ${bodyContent}
@@ -120,6 +124,7 @@ Instruction: ${instruction}
     action: string;
     targetDescription: string;
     value: string | null;
+    index: number | null;
   }): Promise<void> {
     // Use the locator tool to find the target element
     const locatorTool = this.tools.find(tool => tool.name === "locateElement") as LocatorTool;
@@ -129,8 +134,29 @@ Instruction: ${instruction}
     
     const targetLocator = await locatorTool.execute({ description: actionPlan.targetDescription });
     
+    // Apply the index selector if specified
+    const indexedLocator = this.applyIndexSelector(targetLocator, actionPlan.index);
+    
     // Perform the action
-    await this.executeAction(targetLocator, actionPlan.action, actionPlan.value);
+    await this.executeAction(indexedLocator, actionPlan.action, actionPlan.value);
+  }
+  
+  /**
+   * Applies an index selector to a locator
+   * @param locator The original locator
+   * @param index The zero-based index to apply, or null for no indexing
+   * @returns A new locator with the index applied
+   */
+  private applyIndexSelector(locator: Locator, index: number | null): Locator {
+    if (index === null) return locator;
+    
+    if (index === -1) {
+      return locator.last();
+    } else if (index >= 0) {
+      return locator.nth(index);
+    }
+    
+    return locator;
   }
 
   /**
@@ -146,7 +172,7 @@ Instruction: ${instruction}
   ): Promise<void> {
     switch (action) {
       case 'click':
-        await locator.first().click();
+        await locator.click();
         break;
       case 'fill':
         if (value === null) {
