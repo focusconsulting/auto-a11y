@@ -57,7 +57,6 @@ export class AIAgent {
       `${tool.name}: ${tool.description}`
     ).join('\n');
     
-    // AI! provide additional guidance that "first" should map to the zero index.  The llm is returning index: 1 when I ask for the first element
     // Create the base prompt for the AI
     const basePrompt = `
 You are an expert in web automation with Playwright. Given the HTML below and an instruction,
@@ -71,6 +70,12 @@ First, analyze the instruction to determine:
 2. Which element to target
 3. Any additional values needed (text to type, etc.)
 4. If multiple elements might match, specify which one using a zero-based index (0 for first, 1 for second, etc.)
+
+IMPORTANT: When the instruction mentions "first", "second", etc., map them directly to zero-based indices:
+- "first" → index: 0
+- "second" → index: 1
+- "third" → index: 2
+- "last" → index: -1
 
 Then, create a plan that uses the available tools to execute the instruction.
 
@@ -102,7 +107,7 @@ Instruction: ${instruction}
       try {
         // Execute the prompt with the AI
         const response = await this.aiLocator.executePrompt(prompt, {
-          systemPrompt: "You are a web automation assistant that helps users interact with web pages using natural language. Return ONLY valid JSON with no additional text or explanation. Your response must be parseable by JSON.parse()."
+          systemPrompt: "You are a web automation assistant that helps users interact with web pages using natural language. Return ONLY valid JSON with no additional text or explanation. Your response must be parseable by JSON.parse(). When the instruction mentions 'first', use index: 0; 'second', use index: 1; 'third', use index: 2; 'last', use index: -1."
         });
         
         // Parse the AI response
